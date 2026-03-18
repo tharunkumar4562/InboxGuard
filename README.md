@@ -60,3 +60,25 @@ After deployment, share your `onrender.com` or Railway URL for outreach.
 Suggested pitch:
 
 "I am an AI student building a pre-send heuristic engine. I launched the beta and can run a free domain risk check for you."
+
+## Programmatic SEO Setup (2026)
+
+This app now supports long-tail, intent-driven landing pages.
+
+### Live pSEO routes
+
+- `/p/fix-godaddy-spam-issues`
+- `/p/instantly-deliverability-audit`
+- `/p/hostinger-email-deliverability-audit`
+
+### SEO and crawl endpoints
+
+- `/robots.txt`
+- `/sitemap.xml`
+
+### Immediate indexing steps
+
+1. Open Google Search Console and add your Railway URL property.
+2. Submit `/sitemap.xml`.
+3. Request indexing for `/` and each `/p/...` page.
+4. Post those exact long-tail URLs in relevant Reddit/X threads for early trust signals.
