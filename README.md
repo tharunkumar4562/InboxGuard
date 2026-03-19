@@ -55,6 +55,12 @@ To share InboxGuard publicly without buying a domain yet, deploy to:
 - Render (recommended for quickest free public URL)
 - Railway
 
+For Railway, this repo now includes both `Procfile` and `railway.json` so the app starts with:
+
+`uvicorn main:app --host 0.0.0.0 --port $PORT`
+
+If Railway shows "Application not found", verify you are opening the current service domain from the active project/environment in Railway dashboard.
+
 After deployment, share your `onrender.com` or Railway URL for outreach.
 
 Suggested pitch:
