@@ -6,6 +6,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from analyzer import analyze_email
+from utils import build_email_from_raw, extract_domain_from_text
 
 app = FastAPI(title="InboxGuard")
 
@@ -134,8 +135,10 @@ def sitemap_xml():
 
 
 @app.post("/analyze")
-def analyze(email: str = Form(...), domain: str = Form(...)):
-    result = analyze_email(email, domain)
+def analyze(email: str = Form(""), domain: str = Form(""), raw_email: str = Form("")):
+    parsed_email = build_email_from_raw(raw_email, fallback_email=email)
+    parsed_domain = domain.strip() or extract_domain_from_text(raw_email) or extract_domain_from_text(parsed_email)
+    result = analyze_email(parsed_email, parsed_domain)
     return result
 
 

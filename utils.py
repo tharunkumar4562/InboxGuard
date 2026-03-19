@@ -1,5 +1,6 @@
 import re
 from typing import Dict, List
+from urllib.parse import urlparse
 
 SPAM_TERMS = {
     "guaranteed",
@@ -157,3 +158,40 @@ def automation_signal_score(text: str) -> Dict[str, object]:
         "template_markers": template_markers,
         "repeated_phrase_hits": repeated_phrase_hits,
     }
+
+
+def extract_subject_from_raw(text: str) -> str:
+    match = re.search(r"^\s*Subject:\s*(.+)$", text, flags=re.IGNORECASE | re.MULTILINE)
+    if match:
+        return match.group(1).strip()
+    first_line = first_non_empty_line(text)
+    return first_line.strip()
+
+
+def extract_domain_from_text(text: str) -> str:
+    from_match = re.search(r"^\s*From:\s*(?:.*<)?[A-Z0-9._%+-]+@([A-Z0-9.-]+\.[A-Z]{2,})>?", text, flags=re.IGNORECASE | re.MULTILINE)
+    if from_match:
+        return normalize_domain(from_match.group(1))
+
+    link_match = re.search(r"https?://[^\s)>'\"]+", text, flags=re.IGNORECASE)
+    if link_match:
+        host = urlparse(link_match.group(0)).hostname or ""
+        if host:
+            return normalize_domain(host)
+
+    return ""
+
+
+def build_email_from_raw(raw_text: str, fallback_email: str = "") -> str:
+    raw = raw_text.strip()
+    if not raw:
+        return fallback_email.strip()
+
+    subject = extract_subject_from_raw(raw)
+    body = email_body_without_headers(raw)
+    if not body:
+        body = raw
+
+    if subject:
+        return f"Subject: {subject}\n\n{body}".strip()
+    return body.strip()

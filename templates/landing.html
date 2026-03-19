@@ -49,6 +49,10 @@
             <p class="text-base font-semibold text-slate-100">Paste your email. See what is broken in 5 seconds.</p>
             <p class="text-xs text-slate-400">Last scan: 72/100 (High Risk)</p>
             <div>
+              <label for="raw-email" class="mb-2 block text-sm text-slate-300">Quick Paste Mode (Ctrl + V full email)</label>
+              <textarea id="raw-email" name="raw_email" rows="5" class="w-full rounded-2xl border border-slate-700 bg-slate-950/70 p-4 text-sm text-slate-100 outline-none ring-0 transition focus:border-blue-500" placeholder="From: noreply@yourdomain.com&#10;Subject: Last chance...&#10;&#10;Paste full email here and we auto-detect everything."></textarea>
+            </div>
+            <div>
               <label for="email-quick" class="mb-2 block text-sm text-slate-300">Paste your email subject or opener</label>
               <input id="email-quick" name="email" type="text" required class="w-full rounded-2xl border border-slate-700 bg-slate-950/70 p-4 text-sm text-slate-100 outline-none ring-0 transition focus:border-blue-500" value="Quick question about your outreach performance" />
             </div>
@@ -64,8 +68,8 @@ Best,
 Your Name</textarea>
             </details>
             <div>
-              <label for="domain" class="mb-2 block text-sm text-slate-300">Enter domain</label>
-              <input id="domain" name="domain" type="text" required class="w-full rounded-2xl border border-slate-700 bg-slate-950/70 p-3 text-sm text-slate-100 outline-none transition focus:border-blue-500" placeholder="example.com" />
+              <label for="domain" class="mb-2 block text-sm text-slate-300">Enter domain (optional)</label>
+              <input id="domain" name="domain" type="text" class="w-full rounded-2xl border border-slate-700 bg-slate-950/70 p-3 text-sm text-slate-100 outline-none transition focus:border-blue-500" placeholder="example.com" />
             </div>
             <p class="pt-2 text-sm text-slate-200">Takes 5 seconds. No setup needed.</p>
             <button type="submit" id="run-check" class="my-3 w-full rounded-2xl bg-blue-600 px-6 py-4 text-lg font-bold text-white shadow-lg shadow-blue-900/40 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60">
