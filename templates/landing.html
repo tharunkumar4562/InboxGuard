@@ -44,30 +44,9 @@
         <p class="mt-4 max-w-3xl text-base text-slate-300 md:text-xl">
           {{ provider }} users: fix {{ problem }} before your next campaign send. Run a live risk check with SPF, DKIM, DMARC, header alignment, and sending behavior diagnostics.
         </p>
-        <p class="mt-3 max-w-2xl text-sm font-semibold text-red-200 md:text-base">
+        <p class="mt-4 max-w-2xl text-sm font-semibold text-red-200 md:text-base">
           Most domains get flagged after 1-2 bad campaigns.
         </p>
-
-        <section class="mt-8 grid gap-6 lg:grid-cols-2">
-          <div class="rounded-2xl border border-slate-700/80 bg-slate-900/70 p-5">
-            <p class="text-sm uppercase tracking-[0.14em] text-slate-400">If you are seeing</p>
-            <ul class="mt-3 space-y-2 text-sm text-slate-200">
-              <li class="risk-item">Open rates dropping suddenly</li>
-              <li class="risk-item">Emails landing in spam despite warmup</li>
-              <li class="risk-item">No replies from active campaigns</li>
-            </ul>
-            <p class="mt-3 text-sm text-red-200">Your setup is likely broken and you may not see it yet.</p>
-          </div>
-          <div class="rounded-2xl border border-blue-500/35 bg-blue-500/10 p-5">
-            <p class="text-sm uppercase tracking-[0.14em] text-blue-200">Why InboxGuard is different</p>
-            <p class="mt-3 text-sm text-slate-100">
-              Most tools show results after sending. InboxGuard detects problems before you send, so you do not damage your domain reputation.
-            </p>
-            <p class="mt-3 text-sm text-slate-300">
-              Built for real cold email workflows and based on actual deliverability checks: SPF, DKIM, DMARC, header alignment, and content behavior.
-            </p>
-          </div>
-        </section>
 
         <div class="mt-10 rounded-3xl border border-slate-700/80 bg-slate-900/75 p-6 shadow-2xl backdrop-blur">
           <h2 class="text-lg font-semibold">Run a pre-send risk scan</h2>
@@ -92,19 +71,11 @@ Your Name</textarea>
               <input id="domain" name="domain" type="text" required class="w-full rounded-2xl border border-slate-700 bg-slate-950/70 p-3 text-sm text-slate-100 outline-none transition focus:border-blue-500" placeholder="example.com" />
             </div>
             <p class="text-sm text-slate-200">Takes 5 seconds. No setup needed.</p>
-            <button type="submit" id="run-check" class="w-full rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white shadow-lg shadow-blue-900/40 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60">
+            <button type="submit" id="run-check" class="w-full rounded-2xl bg-blue-600 px-6 py-4 text-lg font-bold text-white shadow-lg shadow-blue-900/40 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60">
               Check My Email Risk
             </button>
             <p class="text-center text-xs text-slate-400">No signup required • No data stored</p>
-
-            <div id="example-scan" class="rounded-2xl border border-red-500/40 bg-red-500/10 p-4">
-              <p class="text-sm font-semibold text-red-100">Example Scan: Risk Score 68/100 (High Risk)</p>
-              <ul class="mt-2 space-y-2 text-sm text-slate-100">
-                <li class="risk-item">Your emails may go to spam due to SPF misalignment</li>
-                <li class="risk-item">Your open rates may drop from spam-trigger wording</li>
-                <li class="risk-item">Your domain may look like automated outreach traffic</li>
-              </ul>
-            </div>
+            <p class="text-xs text-slate-400">Example: 68/100 risk score due to spam-placement signals.</p>
           </form>
         </div>
 
@@ -159,6 +130,31 @@ Your Name</textarea>
                 </a>
               </div>
             </div>
+          </div>
+        </section>
+
+        <section class="mt-10 grid gap-6 lg:grid-cols-3">
+          <div class="rounded-2xl border border-slate-700/80 bg-slate-900/70 p-5">
+            <p class="text-sm uppercase tracking-[0.14em] text-slate-400">If you are seeing</p>
+            <ul class="mt-3 space-y-2 text-sm text-slate-200">
+              <li class="risk-item">Open rates dropping suddenly</li>
+              <li class="risk-item">Emails landing in spam despite warmup</li>
+              <li class="risk-item">No replies from active campaigns</li>
+            </ul>
+            <p class="mt-3 text-sm text-red-200">Your setup is likely broken and you may not see it yet.</p>
+          </div>
+          <div class="rounded-2xl border border-blue-500/35 bg-blue-500/10 p-5">
+            <p class="text-sm uppercase tracking-[0.14em] text-blue-200">Why InboxGuard is different</p>
+            <p class="mt-3 text-sm text-slate-100">Most tools show results after sending. InboxGuard detects problems before you send to reduce domain damage risk.</p>
+            <p class="mt-3 text-sm text-slate-300">Built for cold email workflows with SPF, DKIM, DMARC, header-alignment, and behavior checks.</p>
+          </div>
+          <div class="rounded-2xl border border-emerald-500/35 bg-emerald-500/10 p-5">
+            <p class="text-sm uppercase tracking-[0.14em] text-emerald-200">What this protects</p>
+            <ul class="mt-3 space-y-2 text-sm text-emerald-100">
+              <li class="trust-item">Domain reputation before launch</li>
+              <li class="trust-item">Campaign reply potential</li>
+              <li class="trust-item">Sender account stability</li>
+            </ul>
           </div>
         </section>
       </section>
