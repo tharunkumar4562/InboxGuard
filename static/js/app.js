@@ -15,6 +15,11 @@ const lockedFixes = document.getElementById("locked-fixes");
 const emailQuickInput = document.getElementById("email-quick");
 const rawEmailInput = document.getElementById("raw-email");
 const domainInput = document.getElementById("domain");
+const manualBodyInput = document.getElementById("manual-body");
+const pasteModeWrap = document.getElementById("paste-mode-wrap");
+const manualModeWrap = document.getElementById("manual-mode-wrap");
+const switchToManual = document.getElementById("switch-to-manual");
+const switchToPaste = document.getElementById("switch-to-paste");
 const scoreBreakdownWrap = document.getElementById("score-breakdown-wrap");
 const scoreBreakdownNode = document.getElementById("score-breakdown");
 const problemSummary = document.getElementById("problem-summary");
@@ -25,6 +30,7 @@ document.body.appendChild(errorBanner);
 
 const loadingMessages = ["Analyzing SPF...", "Checking DKIM and DMARC...", "Scanning content and sending pattern..."];
 let loadingTimer = null;
+let currentInputMode = "paste";
 
 const pillStyle = {
     "High Risk": {
@@ -143,6 +149,50 @@ function renderRisk(summary) {
     }
 }
 
+function setInputMode(mode) {
+    currentInputMode = mode;
+
+    if (pasteModeWrap && manualModeWrap) {
+        if (mode === "paste") {
+            pasteModeWrap.classList.remove("hidden");
+            manualModeWrap.classList.add("hidden");
+            if (rawEmailInput) {
+                rawEmailInput.disabled = false;
+            }
+            if (emailQuickInput) {
+                emailQuickInput.disabled = true;
+            }
+            if (domainInput) {
+                domainInput.disabled = true;
+            }
+            if (manualBodyInput) {
+                manualBodyInput.disabled = true;
+            }
+            if (submitButton) {
+                submitButton.textContent = "Check Deliverability Risk ->";
+            }
+        } else {
+            manualModeWrap.classList.remove("hidden");
+            pasteModeWrap.classList.add("hidden");
+            if (rawEmailInput) {
+                rawEmailInput.disabled = true;
+            }
+            if (emailQuickInput) {
+                emailQuickInput.disabled = false;
+            }
+            if (domainInput) {
+                domainInput.disabled = false;
+            }
+            if (manualBodyInput) {
+                manualBodyInput.disabled = false;
+            }
+            if (submitButton) {
+                submitButton.textContent = "Check Deliverability Risk ->";
+            }
+        }
+    }
+}
+
 function renderBreakdown(summary) {
     if (!scoreBreakdownWrap || !scoreBreakdownNode) {
         return;
@@ -173,21 +223,28 @@ form.addEventListener("submit", async (event) => {
     const quickText = emailQuickInput ? emailQuickInput.value.trim() : "";
     const rawText = rawEmailInput ? rawEmailInput.value.trim() : "";
     const domainText = domainInput ? domainInput.value.trim() : "";
+    const manualBodyText = manualBodyInput ? manualBodyInput.value.trim() : "";
 
-    // Single Source of Truth: determine what gets sent
-    let useRawEmail = rawText.length > 20; // min sanity check
-    let useManualFields = !useRawEmail && (quickText || domainText);
+    const useRawEmail = currentInputMode === "paste";
+    const useManualFields = currentInputMode === "manual";
 
-    // Validation: must have at least one valid source
-    if (!useRawEmail && !useManualFields) {
-        showError("Add an email to scan (paste full email or enter subject/domain)");
+    if (useRawEmail && rawText.length < 20) {
+        showError("Paste a full email to scan");
         return;
     }
 
-    // Keep manual fields untouched when raw email is used.
+    if (useManualFields && !quickText && !domainText && !manualBodyText) {
+        showError("Enter subject, domain, or body in manual mode");
+        return;
+    }
+
     let finalRawEmail = rawText;
     let finalEmail = quickText;
     let finalDomain = domainText;
+    if (useManualFields && manualBodyText) {
+        const subjectLine = finalEmail || "No subject";
+        finalEmail = `Subject: ${subjectLine}\n\n${manualBodyText}`;
+    }
 
     submitButton.disabled = true;
     submitButton.textContent = "Analyzing...";
@@ -250,7 +307,7 @@ form.addEventListener("submit", async (event) => {
         resultSection.classList.add("visible");
     } finally {
         submitButton.disabled = false;
-        submitButton.textContent = "Scan Before You Send";
+        submitButton.textContent = "Check Deliverability Risk ->";
     }
 });
 
@@ -260,12 +317,41 @@ leadEmailInput.addEventListener("input", () => {
 
 if (domainInput) {
     domainInput.addEventListener("input", () => {
-        if (hasAutoFilledFromPaste) {
-            manualOverride = true;
-            domainInput.title = "Manual override";
-        }
         updateLeadLinks(domainInput.value);
     });
 }
 
+if (switchToManual) {
+    switchToManual.addEventListener("click", () => setInputMode("manual"));
+}
+
+if (switchToPaste) {
+    switchToPaste.addEventListener("click", () => setInputMode("paste"));
+}
+
+if (rawEmailInput) {
+    rawEmailInput.addEventListener("input", () => {
+        if (rawEmailInput.value.trim()) {
+            setInputMode("paste");
+        }
+    });
+}
+
+if (emailQuickInput) {
+    emailQuickInput.addEventListener("input", () => {
+        if (emailQuickInput.value.trim()) {
+            setInputMode("manual");
+        }
+    });
+}
+
+if (manualBodyInput) {
+    manualBodyInput.addEventListener("input", () => {
+        if (manualBodyInput.value.trim()) {
+            setInputMode("manual");
+        }
+    });
+}
+
 updateLeadLinks(domainInput ? domainInput.value : "");
+setInputMode("paste");

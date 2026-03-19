@@ -48,23 +48,33 @@
             <form id="risk-form" class="space-y-4">
               <p class="text-2xl font-bold uppercase tracking-[0.04em] text-slate-100">PASTE YOUR EMAIL (Ctrl + V)</p>
               <p class="text-sm font-medium text-red-100/90">Most emails fail silently. Check before you send.</p>
-              <div>
-                <textarea id="raw-email" name="raw_email" rows="7" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" class="w-full rounded-2xl border border-slate-700 bg-slate-950/70 p-4 text-base text-slate-100 outline-none ring-0 transition focus:border-blue-500" placeholder="Paste your email (Ctrl + V)&#10;&#10;We'll instantly tell you:&#10;- If it goes to spam&#10;- What's breaking deliverability&#10;&#10;Example:&#10;From: name@company.com&#10;Subject: Quick question&#10;&#10;Hi John,&#10;Just following up..."></textarea>
+              <div id="paste-mode-wrap" class="space-y-3">
+                <div>
+                  <textarea id="raw-email" name="raw_email" rows="7" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" class="w-full rounded-2xl border border-slate-700 bg-slate-950/70 p-4 text-base text-slate-100 outline-none ring-0 transition focus:border-blue-500" placeholder="Paste your full email (Ctrl + V)"></textarea>
+                </div>
+                <p class="text-sm text-slate-300">Paste mode analyzes your raw email only.</p>
+                <div class="form-divider" aria-hidden="true">OR</div>
+                <button id="switch-to-manual" type="button" class="w-full text-left text-sm font-semibold text-blue-200 transition hover:text-blue-100">Enter details manually -></button>
               </div>
-              <p class="text-sm text-slate-300">We analyze pasted content directly. Manual subject/domain fields stay exactly as you type them.</p>
-              <div class="form-divider" aria-hidden="true">OR</div>
-              <p class="structured-label">OR manually enter details (if not pasting full email)</p>
-              <div>
-                <label for="email-quick" class="mb-2 block text-sm text-slate-400">Subject</label>
-                <input id="email-quick" name="email" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" class="w-full rounded-2xl border border-slate-700 bg-slate-950/70 p-4 text-sm text-slate-100 outline-none ring-0 transition focus:border-blue-500" placeholder="Subject line" />
-              </div>
-              <div>
-                <label for="domain" class="mb-2 block text-sm text-slate-400">Domain (auto-detected if left empty)</label>
-                <input id="domain" name="domain" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" class="w-full rounded-2xl border border-slate-700 bg-slate-950/70 p-3 text-sm text-slate-100 outline-none transition focus:border-blue-500" placeholder="Domain (auto-detected if left empty)" />
+              <div id="manual-mode-wrap" class="hidden space-y-3">
+                <p class="structured-label">Manual mode</p>
+                <div>
+                  <label for="email-quick" class="mb-2 block text-sm text-slate-400">Subject</label>
+                  <input id="email-quick" name="email" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" class="w-full rounded-2xl border border-slate-700 bg-slate-950/70 p-4 text-sm text-slate-100 outline-none ring-0 transition focus:border-blue-500" placeholder="Subject line" />
+                </div>
+                <div>
+                  <label for="domain" class="mb-2 block text-sm text-slate-400">Domain</label>
+                  <input id="domain" name="domain" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" class="w-full rounded-2xl border border-slate-700 bg-slate-950/70 p-3 text-sm text-slate-100 outline-none transition focus:border-blue-500" placeholder="yourdomain.com" />
+                </div>
+                <div>
+                  <label for="manual-body" class="mb-2 block text-sm text-slate-400">Email body (optional)</label>
+                  <textarea id="manual-body" rows="4" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" class="w-full rounded-2xl border border-slate-700 bg-slate-950/70 p-3 text-sm text-slate-100 outline-none transition focus:border-blue-500" placeholder="Paste email body"></textarea>
+                </div>
+                <button id="switch-to-paste" type="button" class="w-full text-left text-sm font-semibold text-blue-200 transition hover:text-blue-100">Use paste mode instead -></button>
               </div>
               <p class="pt-2 text-sm text-slate-200">Takes 5 seconds. No setup needed.</p>
               <button type="submit" id="run-check" class="my-3 w-full rounded-2xl bg-blue-600 px-6 py-4 text-lg font-bold text-white shadow-lg shadow-blue-900/40 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60">
-                Scan Before You Send
+                Check Deliverability Risk ->
               </button>
               <p class="pb-3 text-center text-xs text-slate-400">No signup required • No data stored</p>
               <p class="text-center text-xs text-blue-100/90">Used by cold emailers sending 1k+ emails/day.</p>
@@ -88,7 +98,7 @@
           <div id="problem-summary" class="mt-4 rounded-2xl border border-red-500/35 bg-red-500/10 p-4">
             <p class="text-sm font-semibold text-red-100">Your email shows signs of:</p>
             <ul class="mt-2 space-y-1 text-sm text-red-50">
-              <li>- Weak authentication setup</li>
+              <li>- Authentication not verifiable without full headers</li>
               <li>- Generic outreach pattern</li>
               <li>- Low trust signals</li>
             </ul>
