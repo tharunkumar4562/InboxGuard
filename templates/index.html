@@ -44,41 +44,22 @@
         </p>
 
         <div class="mt-10">
-          <section class="p-1">
+          <section class="rounded-3xl border border-blue-500/35 bg-slate-900/70 p-6 shadow-2xl shadow-blue-950/30 md:p-8">
             <form id="risk-form" class="space-y-4">
-              <p class="text-base font-semibold text-slate-100">Paste your email. See what is broken in 5 seconds.</p>
-              <p class="text-xs text-slate-400">Last scan: 72/100 (High Risk)</p>
+              <p class="text-2xl font-bold uppercase tracking-[0.04em] text-slate-100">PASTE YOUR EMAIL (Ctrl + V)</p>
               <div>
-                <label for="raw-email" class="mb-2 block text-2xl font-bold tracking-tight text-slate-100">PASTE YOUR EMAIL (Ctrl + V)</label>
-                <textarea id="raw-email" name="raw_email" rows="6" class="w-full rounded-2xl border border-slate-700 bg-slate-950/70 p-4 text-sm text-slate-100 outline-none ring-0 transition focus:border-blue-500" placeholder="Paste full email here (Ctrl + V)&#10;&#10;Example:&#10;From: name@company.com&#10;Subject: Quick question&#10;&#10;Hi John..."></textarea>
-                <p class="mt-2 text-sm text-slate-300">We auto-detect subject, body, and domain. Works with Gmail, Instantly, Smartlead emails.</p>
+                <textarea id="raw-email" name="raw_email" rows="6" class="w-full rounded-2xl border border-slate-700 bg-slate-950/70 p-4 text-base text-slate-100 outline-none ring-0 transition focus:border-blue-500" placeholder="Paste full email here (Ctrl + V)&#10;&#10;Example:&#10;From: name@company.com&#10;Subject: Quick question&#10;&#10;Hi John..."></textarea>
               </div>
-              <div class="flex items-center gap-3 text-slate-400">
-                <span class="h-px flex-1 bg-slate-700/70"></span>
-                <span class="text-xl font-semibold lowercase">or</span>
-                <span class="h-px flex-1 bg-slate-700/70"></span>
+              <p class="text-sm text-slate-300">We auto-detect subject, body, and domain. Works with Gmail, Instantly, Smartlead emails.</p>
+              <div class="form-divider" aria-hidden="true">or</div>
+              <p class="structured-label">OR use structured input (optional)</p>
+              <div>
+                <label for="email-quick" class="mb-2 block text-sm text-slate-400">Subject</label>
+                <input id="email-quick" name="email" type="text" required class="w-full rounded-2xl border border-slate-700 bg-slate-950/70 p-4 text-sm text-slate-100 outline-none ring-0 transition focus:border-blue-500" value="Quick question about your outreach performance" />
               </div>
-              <div class="space-y-4 opacity-85">
-                <p class="text-sm font-semibold text-slate-300">Use structured input (optional)</p>
-                <div>
-                  <label for="email-quick" class="mb-2 block text-sm text-slate-300">Paste your email subject or opener</label>
-                  <input id="email-quick" name="email" type="text" class="w-full rounded-2xl border border-slate-700 bg-slate-950/70 p-4 text-sm text-slate-100 outline-none ring-0 transition focus:border-blue-500" value="Quick question about your outreach performance" />
-                </div>
-                <details class="rounded-2xl border border-slate-700/70 bg-slate-950/40 p-3">
-                  <summary class="cursor-pointer text-sm text-slate-300">Optional: paste full email body</summary>
-                  <textarea id="email-full" rows="6" class="mt-3 w-full rounded-2xl border border-slate-700 bg-slate-950/70 p-4 text-sm text-slate-100 outline-none ring-0 transition focus:border-blue-500">Subject: Quick question about your outreach
-
-Hi &#123;&#123;first_name&#125;&#125;,
-I checked your recent campaigns and noticed a pattern that can hurt inbox placement.
-If you are open, I can share 3 quick fixes that usually improve replies within a week.
-
-Best,
-Your Name</textarea>
-                </details>
-                <div>
-                  <label for="domain" class="mb-2 block text-sm text-slate-300">Domain (auto-detected if left empty)</label>
-                  <input id="domain" name="domain" type="text" class="w-full rounded-2xl border border-slate-700 bg-slate-950/70 p-3 text-sm text-slate-100 outline-none transition focus:border-blue-500" placeholder="example.com" />
-                </div>
+              <div>
+                <label for="domain" class="mb-2 block text-sm text-slate-400">Domain (auto-detected if left empty)</label>
+                <input id="domain" name="domain" type="text" class="w-full rounded-2xl border border-slate-700 bg-slate-950/70 p-3 text-sm text-slate-100 outline-none transition focus:border-blue-500" placeholder="Domain (auto-detected if left empty)" />
               </div>
               <p class="pt-2 text-sm text-slate-200">Takes 5 seconds. No setup needed.</p>
               <button type="submit" id="run-check" class="my-3 w-full rounded-2xl bg-blue-600 px-6 py-4 text-lg font-bold text-white shadow-lg shadow-blue-900/40 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60">

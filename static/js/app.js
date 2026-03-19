@@ -13,7 +13,6 @@ const resultCta = document.getElementById("result-cta");
 const loadingStep = document.getElementById("loading-step");
 const lockedFixes = document.getElementById("locked-fixes");
 const emailQuickInput = document.getElementById("email-quick");
-const emailFullInput = document.getElementById("email-full");
 const rawEmailInput = document.getElementById("raw-email");
 const scoreBreakdownWrap = document.getElementById("score-breakdown-wrap");
 const scoreBreakdownNode = document.getElementById("score-breakdown");
@@ -154,10 +153,8 @@ form.addEventListener("submit", async (event) => {
     try {
         const formData = new FormData(form);
         const quickText = emailQuickInput ? emailQuickInput.value.trim() : "";
-        const fullText = emailFullInput ? emailFullInput.value.trim() : "";
         const rawText = rawEmailInput ? rawEmailInput.value.trim() : "";
-        const composedEmail = fullText ? `${quickText}\n\n${fullText}` : quickText;
-        formData.set("email", composedEmail);
+        formData.set("email", quickText);
         if (rawText) {
             formData.set("raw_email", rawText);
         }
