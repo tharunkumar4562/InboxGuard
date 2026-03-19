@@ -12,6 +12,8 @@ const resultLoading = document.getElementById("result-loading");
 const resultCta = document.getElementById("result-cta");
 const loadingStep = document.getElementById("loading-step");
 const lockedFixes = document.getElementById("locked-fixes");
+const emailQuickInput = document.getElementById("email-quick");
+const emailFullInput = document.getElementById("email-full");
 
 const loadingMessages = ["Analyzing SPF...", "Checking DKIM and DMARC...", "Scanning content and sending pattern..."];
 let loadingTimer = null;
@@ -127,6 +129,11 @@ form.addEventListener("submit", async (event) => {
 
     try {
         const formData = new FormData(form);
+        const quickText = emailQuickInput ? emailQuickInput.value.trim() : "";
+        const fullText = emailFullInput ? emailFullInput.value.trim() : "";
+        const composedEmail = fullText ? `${quickText}\n\n${fullText}` : quickText;
+        formData.set("email", composedEmail);
+
         const [response] = await Promise.all([
             fetch("/analyze", {
                 method: "POST",
