@@ -8,6 +8,8 @@ const submitButton = document.getElementById("run-check");
 const unlockLink = document.getElementById("unlock-link");
 const leadEmailInput = document.getElementById("lead-email");
 const emailRequestLink = document.getElementById("email-request-link");
+const resultLoading = document.getElementById("result-loading");
+const resultCta = document.getElementById("result-cta");
 
 const pillStyle = {
     "High Risk": {
@@ -50,6 +52,22 @@ function renderFindings(findings) {
     });
 }
 
+function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function setLoadingState(isLoading) {
+    if (isLoading) {
+        resultLoading.classList.remove("hidden");
+        resultCta.classList.add("hidden");
+        findingsNode.innerHTML = "";
+        bandNode.textContent = "Analyzing your copy and domain signals...";
+        scoreNode.textContent = "--";
+        return;
+    }
+    resultLoading.classList.add("hidden");
+}
+
 function updateLeadLinks(domain) {
     const cleanDomain = (domain || "yourdomain.com").trim();
     const waText = encodeURIComponent(`I want to unlock the full report for ${cleanDomain}`);
@@ -80,13 +98,17 @@ form.addEventListener("submit", async (event) => {
 
     submitButton.disabled = true;
     submitButton.textContent = "Analyzing...";
+    setLoadingState(true);
 
     try {
         const formData = new FormData(form);
-        const response = await fetch("/analyze", {
-            method: "POST",
-            body: formData,
-        });
+        const [response] = await Promise.all([
+            fetch("/analyze", {
+                method: "POST",
+                body: formData,
+            }),
+            sleep(2000),
+        ]);
 
         if (!response.ok) {
             throw new Error("Unable to run risk check. Please try again.");
@@ -96,16 +118,17 @@ form.addEventListener("submit", async (event) => {
         renderRisk(data.summary);
         renderFindings(data.partial_findings);
         updateLeadLinks(data.domain);
+        resultCta.classList.remove("hidden");
+        setLoadingState(false);
 
-        resultSection.classList.remove("hidden");
         resultSection.classList.add("visible");
         resultSection.scrollIntoView({ behavior: "smooth", block: "start" });
     } catch (error) {
+        setLoadingState(false);
         findingsNode.innerHTML = `<li class="finding-row high">${error.message}</li>`;
         scoreNode.textContent = "--";
         bandNode.textContent = "Scan failed.";
         updateLeadLinks(document.getElementById("domain").value);
-        resultSection.classList.remove("hidden");
         resultSection.classList.add("visible");
     } finally {
         submitButton.disabled = false;
@@ -116,3 +139,5 @@ form.addEventListener("submit", async (event) => {
 leadEmailInput.addEventListener("input", () => {
     updateLeadLinks(document.getElementById("domain").value);
 });
+
+updateLeadLinks(document.getElementById("domain").value);

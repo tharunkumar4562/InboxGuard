@@ -66,19 +66,26 @@
           </aside>
         </div>
 
-        <section id="result" class="mt-8 hidden rounded-3xl border border-slate-700 bg-slate-900/85 p-6 shadow-2xl">
+        <section id="result" class="mt-8 rounded-3xl border border-slate-700 bg-slate-900/85 p-6 shadow-2xl">
           <div class="flex flex-wrap items-end justify-between gap-3">
             <div>
               <p class="text-sm uppercase tracking-[0.16em] text-slate-400">Partial risk result</p>
               <h3 class="mt-2 text-2xl font-bold">
                 Risk Score: <span id="score" class="text-red-500">--</span>
               </h3>
-              <p id="risk-band" class="mt-1 text-sm text-slate-300"></p>
+              <p id="risk-band" class="mt-1 text-sm text-slate-300">Run Risk Check to reveal your risk score and top issues.</p>
             </div>
             <div id="risk-pill" class="rounded-full border border-red-500/60 bg-red-500/15 px-4 py-1 text-sm font-semibold text-red-100">High Risk</div>
           </div>
 
-          <ul id="findings" class="mt-5 space-y-3"></ul>
+          <div id="result-loading" class="mt-5 hidden rounded-2xl border border-blue-500/45 bg-blue-500/10 p-4 text-sm text-blue-100">
+            <span class="spinner"></span>
+            Analyzing deliverability signals...
+          </div>
+
+          <ul id="findings" class="mt-5 space-y-3">
+            <li class="finding-row medium">Your top findings will appear here after analysis.</li>
+          </ul>
 
           <div class="mt-5 rounded-2xl border border-emerald-500/35 bg-emerald-500/10 p-4">
             <ul class="space-y-2 text-sm text-emerald-100">
@@ -88,7 +95,7 @@
             </ul>
           </div>
 
-          <div class="mt-6 rounded-2xl border border-blue-500/40 bg-blue-500/10 p-5">
+          <div id="result-cta" class="mt-6 hidden rounded-2xl border border-blue-500/40 bg-blue-500/10 p-5">
             <p class="text-base font-semibold">See exactly how to fix this before you send</p>
             <p class="mt-1 text-sm text-slate-300">Get full issue-level remediation steps tailored to your domain and copy.</p>
             <a id="unlock-link" href="https://wa.me/?text=I%20want%20to%20unlock%20the%20full%20report%20for%20yourdomain.com" target="_blank" rel="noopener noreferrer" class="mt-4 inline-flex rounded-xl bg-blue-600 px-5 py-2.5 font-semibold text-white shadow-lg shadow-blue-900/40 transition hover:bg-blue-700">
