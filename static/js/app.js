@@ -10,7 +10,6 @@ const leadEmailInput = document.getElementById("lead-email");
 const emailRequestLink = document.getElementById("email-request-link");
 const resultLoading = document.getElementById("result-loading");
 const resultCta = document.getElementById("result-cta");
-const exampleScan = document.getElementById("example-scan");
 
 const pillStyle = {
     "High Risk": {
@@ -61,11 +60,8 @@ function setLoadingState(isLoading) {
     if (isLoading) {
         resultLoading.classList.remove("hidden");
         resultCta.classList.add("hidden");
-        if (exampleScan) {
-            exampleScan.classList.add("hidden");
-        }
         findingsNode.innerHTML = "";
-        bandNode.textContent = "Analyzing your copy and domain signals...";
+        bandNode.textContent = "We will show what is hurting your deliverability. Fixes are hidden.";
         scoreNode.textContent = "--";
         return;
     }
@@ -129,9 +125,6 @@ form.addEventListener("submit", async (event) => {
         resultSection.scrollIntoView({ behavior: "smooth", block: "start" });
     } catch (error) {
         setLoadingState(false);
-        if (exampleScan) {
-            exampleScan.classList.remove("hidden");
-        }
         findingsNode.innerHTML = `<li class="finding-row high">${error.message}</li>`;
         scoreNode.textContent = "--";
         bandNode.textContent = "Scan failed.";
