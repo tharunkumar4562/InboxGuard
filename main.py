@@ -162,7 +162,7 @@ def analyze(email: str = Form(""), domain: str = Form(""), raw_email: str = Form
     if not parsed_email:
         parsed_email = f"To: {parsed_domain}\n\nNo content provided"
 
-    result = analyze_email(parsed_email, parsed_domain)
+    result = analyze_email(parsed_email, parsed_domain, raw_text)
     return result
 
 

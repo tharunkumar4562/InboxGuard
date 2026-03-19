@@ -76,6 +76,16 @@ COLD_OUTREACH_MARKERS = {
     "book a quick call",
 }
 
+INFORMATIONAL_MARKERS = {
+    "please note",
+    "deadline",
+    "assessment",
+    "all the best",
+    "regards",
+    "please ignore this message",
+    "in case of any issues",
+}
+
 
 def normalize_domain(domain: str) -> str:
     value = domain.strip().lower()
@@ -134,6 +144,7 @@ def detect_email_type(text: str) -> Dict[str, str]:
     transactional_hits = sum(1 for marker in TRANSACTIONAL_MARKERS if marker in content)
     marketing_hits = sum(1 for marker in MARKETING_MARKERS if marker in content)
     cold_hits = sum(1 for marker in COLD_OUTREACH_MARKERS if marker in content)
+    informational_hits = sum(1 for marker in INFORMATIONAL_MARKERS if marker in content)
     no_reply = is_no_reply_sender(text)
 
     if transactional_hits >= 2 or (transactional_hits >= 1 and no_reply):
@@ -154,9 +165,15 @@ def detect_email_type(text: str) -> Dict[str, str]:
             "reason": "Cold outreach pattern detected from opener and CTA language.",
         }
 
+    if informational_hits >= 1:
+        return {
+            "type": "informational/system",
+            "reason": "Informational notice pattern detected with announcement-style language.",
+        }
+
     return {
-        "type": "cold outreach",
-        "reason": "Defaulting to cold outreach profile when pattern is mixed or unclear.",
+        "type": "informational/system",
+        "reason": "Pattern is mixed or unclear; using neutral informational profile to avoid false spam penalties.",
     }
 
 
@@ -248,8 +265,24 @@ def extract_subject_from_raw(text: str) -> str:
     match = re.search(r"^\s*Subject:\s*(.+)$", text, flags=re.IGNORECASE | re.MULTILINE)
     if match:
         return match.group(1).strip()
-    first_line = first_non_empty_line(text)
-    return first_line.strip()
+
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if not lines:
+        return ""
+
+    if len(lines) > 1 and re.match(r"^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$", lines[0], flags=re.IGNORECASE):
+        return lines[1][:120].strip()
+
+    for line in lines:
+        if re.match(r"^(from|to|cc|bcc|date):", line, flags=re.IGNORECASE):
+            continue
+        if re.match(r"^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$", line, flags=re.IGNORECASE):
+            continue
+        if line.lower().startswith(("http://", "https://")):
+            continue
+        return line[:120].strip()
+
+    return ""
 
 
 def extract_domain_from_text(text: str) -> str:

@@ -25,6 +25,9 @@ document.body.appendChild(errorBanner);
 
 const loadingMessages = ["Analyzing SPF...", "Checking DKIM and DMARC...", "Scanning content and sending pattern..."];
 let loadingTimer = null;
+let hasAutoFilledFromPaste = false;
+let manualOverride = false;
+let autoFillSourceHash = "";
 
 const pillStyle = {
     "High Risk": {
@@ -320,8 +323,58 @@ leadEmailInput.addEventListener("input", () => {
     updateLeadLinks(domainInput ? domainInput.value : "");
 });
 
+if (rawEmailInput) {
+    rawEmailInput.addEventListener("paste", () => {
+        // Delay to ensure pasted content is available.
+        setTimeout(() => {
+            const rawText = rawEmailInput.value.trim();
+            if (!rawText) {
+                return;
+            }
+
+            const sourceHash = rawText.slice(0, 400);
+            const isSamePaste = sourceHash === autoFillSourceHash;
+
+            // Never fight manual edits for the same pasted content.
+            if (manualOverride && isSamePaste) {
+                return;
+            }
+
+            const subject = extractSubjectFromRawClient(rawText);
+            const detectedDomain = extractDomainFromRawClient(rawText);
+
+            if (emailQuickInput) {
+                emailQuickInput.value = subject || "";
+                emailQuickInput.title = "Auto-filled from pasted email";
+            }
+            if (domainInput) {
+                domainInput.value = detectedDomain || "";
+                domainInput.title = "Auto-filled from pasted email";
+                updateLeadLinks(domainInput.value);
+            }
+
+            hasAutoFilledFromPaste = true;
+            manualOverride = false;
+            autoFillSourceHash = sourceHash;
+        }, 0);
+    });
+}
+
+if (emailQuickInput) {
+    emailQuickInput.addEventListener("input", () => {
+        if (hasAutoFilledFromPaste) {
+            manualOverride = true;
+            emailQuickInput.title = "Manual override";
+        }
+    });
+}
+
 if (domainInput) {
     domainInput.addEventListener("input", () => {
+        if (hasAutoFilledFromPaste) {
+            manualOverride = true;
+            domainInput.title = "Manual override";
+        }
         updateLeadLinks(domainInput.value);
     });
 }

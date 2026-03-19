@@ -7,6 +7,8 @@ def score_risk(signals: Dict) -> Dict:
     breakdown: List[Dict[str, str | int]] = []
 
     email_type = signals.get("email_type", "cold outreach")
+    auth_verifiable = signals.get("auth_verifiable", False)
+    confidence = signals.get("analysis_confidence", "medium")
 
     def weighted(points: int, category: str = "content") -> int:
         if category == "infra":
@@ -14,6 +16,8 @@ def score_risk(signals: Dict) -> Dict:
         if email_type == "marketing/newsletter":
             return max(1, round(points * 0.6))
         if email_type == "transactional":
+            return max(1, round(points * 0.5))
+        if email_type == "informational/system":
             return max(1, round(points * 0.5))
         return points
 
@@ -33,7 +37,17 @@ def score_risk(signals: Dict) -> Dict:
         }
     )
 
-    if not signals.get("spf", False):
+    findings.append(
+        {
+            "severity": "low",
+            "title": "Analysis confidence",
+            "issue": f"Confidence: {confidence.capitalize()}.",
+            "impact": "Authentication-level claims are only made when enough header evidence is provided.",
+            "fix": "Paste full raw headers for stronger SPF/DKIM/DMARC verification.",
+        }
+    )
+
+    if auth_verifiable and not signals.get("spf", False):
         add_penalty(20, "SPF policy missing", "Domain identity cannot be reliably verified", category="infra")
         findings.append({
             "severity": "high",
@@ -43,7 +57,7 @@ def score_risk(signals: Dict) -> Dict:
             "fix": "Publish an SPF TXT record and include your sending provider, for example: v=spf1 include:_spf.google.com ~all",
         })
 
-    if not signals.get("spf_aligned", False):
+    if auth_verifiable and not signals.get("spf_aligned", False):
         add_penalty(20, "From/SPF misalignment", "From header does not align with authenticated domain", category="infra")
         from_domain = signals.get("from_domain") or "unknown sender domain"
         findings.append({
@@ -54,7 +68,7 @@ def score_risk(signals: Dict) -> Dict:
             "fix": "Send from an address aligned to your authenticated domain, or update your sending domain and DNS to match the From header.",
         })
 
-    if not signals.get("dkim", False):
+    if auth_verifiable and not signals.get("dkim", False):
         add_penalty(20, "DKIM not detected", "Message signing trust signal is missing", category="infra")
         findings.append({
             "severity": "high",
@@ -64,7 +78,7 @@ def score_risk(signals: Dict) -> Dict:
             "fix": "Enable DKIM signing in your email provider and publish the selector DNS record.",
         })
 
-    if not signals.get("dmarc", False):
+    if auth_verifiable and not signals.get("dmarc", False):
         add_penalty(20, "DMARC policy missing", "Spoof and alignment policy is not configured", category="infra")
         findings.append({
             "severity": "high",
@@ -84,15 +98,25 @@ def score_risk(signals: Dict) -> Dict:
             "fix": "Rewrite subject and opening lines with specific, contextual language and remove repetitive trigger wording.",
         })
 
+    link_count = signals.get("link_count", 0)
     if signals.get("too_many_links", False):
-        add_penalty(15, "High link density", "Too many links looks bulk/promotional")
-        findings.append({
-            "severity": "medium",
-            "title": "Link density risk",
-            "issue": "Your copy contains too many outbound links for a first-touch email.",
-            "impact": "High link density increases spam probability.",
-            "fix": "Keep only one primary link in initial outreach and move other resources to follow-up messages.",
-        })
+        if email_type == "marketing/newsletter" and link_count <= 6:
+            findings.append({
+                "severity": "low",
+                "title": "Expected newsletter link pattern",
+                "issue": "Multiple links detected, but this can be normal for newsletter-style emails.",
+                "impact": "No strong penalty applied for this email category.",
+                "fix": "Keep links focused and avoid unnecessary redirects.",
+            })
+        else:
+            add_penalty(15, "High link density", "Too many links looks bulk/promotional")
+            findings.append({
+                "severity": "medium",
+                "title": "Link density risk",
+                "issue": "Your copy contains too many outbound links for a first-touch email.",
+                "impact": "High link density increases spam probability.",
+                "fix": "Keep only one primary link in initial outreach and move other resources to follow-up messages.",
+            })
 
     if signals.get("excessive_caps", False):
         add_penalty(10, "Aggressive capitalization", "Visual shouting lowers inbox trust")
@@ -104,7 +128,7 @@ def score_risk(signals: Dict) -> Dict:
             "fix": "Use sentence case and reserve emphasis for one short phrase only.",
         })
 
-    if signals.get("sending_pattern_risk", False):
+    if signals.get("sending_pattern_risk", False) and email_type == "cold outreach":
         add_penalty(15, "Bulk behavior signal", "Message structure resembles automation patterns")
         aggressive_terms = signals.get("aggressive_tone_terms") or []
         detail = ""
@@ -129,7 +153,7 @@ def score_risk(signals: Dict) -> Dict:
         })
 
     opener_type = signals.get("opener_type")
-    if opener_type in ("generic", "pattern-based"):
+    if email_type == "cold outreach" and opener_type in ("generic", "pattern-based"):
         add_penalty(10, "Low-differentiation opener", signals.get("opener_reason", "Generic opener pattern"))
         findings.append({
             "severity": "medium",
@@ -140,7 +164,7 @@ def score_risk(signals: Dict) -> Dict:
         })
 
     intent_type = signals.get("intent_type")
-    if intent_type in ("no-cta", "vague"):
+    if email_type == "cold outreach" and intent_type in ("no-cta", "vague"):
         add_penalty(8, "Intent clarity weak", signals.get("intent_reason", "Message intent is unclear"))
         findings.append({
             "severity": "low",
@@ -151,7 +175,7 @@ def score_risk(signals: Dict) -> Dict:
         })
 
     confidence_killers = signals.get("confidence_killers") or []
-    if confidence_killers:
+    if confidence_killers and email_type == "cold outreach":
         add_penalty(10, "Confidence-killer phrases", "Overused openers detected")
         findings.append({
             "severity": "medium",
@@ -161,7 +185,7 @@ def score_risk(signals: Dict) -> Dict:
             "fix": "Replace saturated phrases with specific context and a clear reason for outreach.",
         })
 
-    if signals.get("automation_level") == "high":
+    if signals.get("automation_level") == "high" and email_type == "cold outreach":
         add_penalty(12, "Automation fingerprint high", "Template markers and repeated phrases detected")
         findings.append({
             "severity": "medium",

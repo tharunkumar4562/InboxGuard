@@ -48,6 +48,18 @@ def _check_dmarc(domain: str) -> bool:
     return _has_txt_record(f"_dmarc.{domain}", "v=DMARC1")
 
 
+def _has_header_evidence(raw_email: str) -> bool:
+    if not raw_email:
+        return False
+    return bool(
+        re.search(
+            r"^\s*(from|to|subject|date|return-path|authentication-results|dkim-signature|received):",
+            raw_email,
+            flags=re.IGNORECASE | re.MULTILINE,
+        )
+    )
+
+
 def _extract_from_domain(raw_email: str) -> str:
     match = re.search(r"^\s*From:\s*(?:.*<)?([A-Z0-9._%+-]+@([A-Z0-9.-]+\.[A-Z]{2,}))>?", raw_email, flags=re.IGNORECASE | re.MULTILINE)
     if not match:
@@ -82,12 +94,32 @@ def _is_short_generic_email(raw_email: str) -> bool:
     return body_words <= 35 and has_generic_marker
 
 
-def analyze_email(email: str, domain: str) -> Dict:
+def analyze_email(email: str, domain: str, raw_email: str = "") -> Dict:
     clean_domain = normalize_domain(domain)
-    header_alignment = _check_header_mismatch(email, clean_domain)
+    source_text = raw_email.strip() or email
+    has_header_evidence = _has_header_evidence(source_text)
+    auth_verifiable = bool(clean_domain and has_header_evidence)
+
+    if auth_verifiable:
+        header_alignment = _check_header_mismatch(source_text, clean_domain)
+        spf = _check_spf(clean_domain)
+        dkim = _check_dkim(clean_domain)
+        dmarc = _check_dmarc(clean_domain)
+    else:
+        header_alignment = {
+            "from_domain": "",
+            "spf_aligned": False,
+            "header_mismatch": False,
+            "header_note": "Authentication checks not verified because full headers were not provided",
+        }
+        spf = False
+        dkim = False
+        dmarc = False
+
     aggressive_tone_terms = find_aggressive_tone_terms(email)
 
-    too_many_links = count_links(email) > 3
+    link_count = count_links(email)
+    too_many_links = link_count > 3
     tracking_style_links = detect_tracking_style_links(email)
     short_generic_email = _is_short_generic_email(email)
     opener_profile = classify_opener(email)
@@ -99,14 +131,17 @@ def analyze_email(email: str, domain: str) -> Dict:
     sending_pattern_risk = too_many_links or bool(aggressive_tone_terms) or short_generic_email
 
     signals = {
-        "spf": _check_spf(clean_domain),
-        "dkim": _check_dkim(clean_domain),
-        "dmarc": _check_dmarc(clean_domain),
+        "auth_verifiable": auth_verifiable,
+        "analysis_confidence": "high" if auth_verifiable else "medium",
+        "spf": spf,
+        "dkim": dkim,
+        "dmarc": dmarc,
         "from_domain": header_alignment["from_domain"],
         "spf_aligned": header_alignment["spf_aligned"],
         "header_mismatch": header_alignment["header_mismatch"],
         "header_note": header_alignment["header_note"],
         "spam_terms": find_spam_terms(email),
+        "link_count": link_count,
         "too_many_links": too_many_links,
         "tracking_style_links": tracking_style_links,
         "excessive_caps": has_excessive_caps(email),
