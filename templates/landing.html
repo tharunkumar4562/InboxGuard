@@ -47,12 +47,13 @@
           <section class="rounded-3xl border border-blue-500/35 bg-slate-900/70 p-6 shadow-2xl shadow-blue-950/30 md:p-8">
           <form id="risk-form" class="space-y-4">
             <p class="text-2xl font-bold uppercase tracking-[0.04em] text-slate-100">PASTE YOUR EMAIL (Ctrl + V)</p>
+            <p class="text-sm font-medium text-red-100/90">Most emails fail silently. Check before you send.</p>
             <div>
-              <textarea id="raw-email" name="raw_email" rows="6" class="w-full rounded-2xl border border-slate-700 bg-slate-950/70 p-4 text-base text-slate-100 outline-none ring-0 transition focus:border-blue-500" placeholder="Paste full email here (Ctrl + V)&#10;&#10;Example:&#10;From: name@company.com&#10;Subject: Quick question&#10;&#10;Hi John..."></textarea>
+              <textarea id="raw-email" name="raw_email" rows="7" class="w-full rounded-2xl border border-slate-700 bg-slate-950/70 p-4 text-base text-slate-100 outline-none ring-0 transition focus:border-blue-500" placeholder="Paste your email (Ctrl + V)&#10;&#10;We'll instantly tell you:&#10;- If it goes to spam&#10;- What's breaking deliverability&#10;&#10;Example:&#10;From: name@company.com&#10;Subject: Quick question&#10;&#10;Hi John,&#10;Just following up..."></textarea>
             </div>
             <p class="text-sm text-slate-300">We auto-detect subject, body, and domain. Works with Gmail, Instantly, Smartlead emails.</p>
-            <div class="form-divider" aria-hidden="true">or</div>
-            <p class="structured-label">OR use structured input (optional)</p>
+            <div class="form-divider" aria-hidden="true">OR</div>
+            <p class="structured-label">Use structured input (optional)</p>
             <div>
               <label for="email-quick" class="mb-2 block text-sm text-slate-400">Subject</label>
               <input id="email-quick" name="email" type="text" required class="w-full rounded-2xl border border-slate-700 bg-slate-950/70 p-4 text-sm text-slate-100 outline-none ring-0 transition focus:border-blue-500" value="Quick question about your outreach performance" />
@@ -66,6 +67,7 @@
               Scan Before You Send
             </button>
             <p class="pb-3 text-center text-xs text-slate-400">No signup required • No data stored</p>
+            <p class="text-center text-xs text-blue-100/90">Used by cold emailers sending 1k+ emails/day.</p>
             <p class="text-xs text-slate-400">Example: 68/100 risk score due to spam-placement signals.</p>
           </form>
           </section>
