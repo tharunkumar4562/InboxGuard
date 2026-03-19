@@ -14,6 +14,7 @@ const loadingStep = document.getElementById("loading-step");
 const lockedFixes = document.getElementById("locked-fixes");
 const emailQuickInput = document.getElementById("email-quick");
 const rawEmailInput = document.getElementById("raw-email");
+const domainInput = document.getElementById("domain");
 const scoreBreakdownWrap = document.getElementById("score-breakdown-wrap");
 const scoreBreakdownNode = document.getElementById("score-breakdown");
 const problemSummary = document.getElementById("problem-summary");
@@ -151,8 +152,43 @@ function renderBreakdown(summary) {
     scoreBreakdownWrap.classList.remove("hidden");
 }
 
+function extractSubjectFromRawClient(rawText) {
+    const subjectMatch = rawText.match(/^\s*Subject:\s*(.+)$/im);
+    if (subjectMatch && subjectMatch[1]) {
+        return subjectMatch[1].trim();
+    }
+
+    const lines = rawText.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    if (!lines.length) {
+        return "";
+    }
+
+    const likelyHeader = /^(from|to|cc|bcc|date):/i;
+    const firstContentLine = lines.find((line) => !likelyHeader.test(line));
+    return firstContentLine ? firstContentLine.slice(0, 120) : "";
+}
+
+function extractDomainFromRawClient(rawText) {
+    const fromMatch = rawText.match(/^\s*From:\s*(?:.*<)?[A-Z0-9._%+-]+@([A-Z0-9.-]+\.[A-Z]{2,})>?/im);
+    if (fromMatch && fromMatch[1]) {
+        return fromMatch[1].toLowerCase();
+    }
+
+    const emailMatch = rawText.match(/[A-Z0-9._%+-]+@([A-Z0-9.-]+\.[A-Z]{2,})/i);
+    return emailMatch && emailMatch[1] ? emailMatch[1].toLowerCase() : "";
+}
+
 form.addEventListener("submit", async (event) => {
     event.preventDefault();
+
+    const quickText = emailQuickInput ? emailQuickInput.value.trim() : "";
+    const rawText = rawEmailInput ? rawEmailInput.value.trim() : "";
+    const domainText = domainInput ? domainInput.value.trim() : "";
+
+    if (!rawText && !quickText && !domainText) {
+        alert("Paste full email OR fill subject/domain");
+        return;
+    }
 
     submitButton.disabled = true;
     submitButton.textContent = "Analyzing...";
@@ -162,9 +198,8 @@ form.addEventListener("submit", async (event) => {
 
     try {
         const formData = new FormData(form);
-        const quickText = emailQuickInput ? emailQuickInput.value.trim() : "";
-        const rawText = rawEmailInput ? rawEmailInput.value.trim() : "";
         formData.set("email", quickText);
+        formData.set("domain", domainText);
         if (rawText) {
             formData.set("raw_email", rawText);
         }
@@ -216,7 +251,37 @@ form.addEventListener("submit", async (event) => {
 });
 
 leadEmailInput.addEventListener("input", () => {
-    updateLeadLinks(document.getElementById("domain").value);
+    updateLeadLinks(domainInput ? domainInput.value : "");
 });
 
-updateLeadLinks(document.getElementById("domain").value);
+if (rawEmailInput) {
+    rawEmailInput.addEventListener("input", () => {
+        const rawText = rawEmailInput.value.trim();
+        if (!rawText) {
+            return;
+        }
+
+        if (emailQuickInput && !emailQuickInput.value.trim()) {
+            const subject = extractSubjectFromRawClient(rawText);
+            if (subject) {
+                emailQuickInput.value = subject;
+            }
+        }
+
+        if (domainInput && !domainInput.value.trim()) {
+            const detectedDomain = extractDomainFromRawClient(rawText);
+            if (detectedDomain) {
+                domainInput.value = detectedDomain;
+                updateLeadLinks(detectedDomain);
+            }
+        }
+    });
+}
+
+if (domainInput) {
+    domainInput.addEventListener("input", () => {
+        updateLeadLinks(domainInput.value);
+    });
+}
+
+updateLeadLinks(domainInput ? domainInput.value : "");
