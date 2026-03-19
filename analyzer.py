@@ -8,6 +8,7 @@ from scorer import score_risk
 from utils import (
     automation_signal_score,
     count_links,
+    detect_email_type,
     detect_confidence_killers,
     detect_tracking_style_links,
     email_body_without_headers,
@@ -16,6 +17,7 @@ from utils import (
     has_excessive_caps,
     classify_intent_clarity,
     classify_opener,
+    is_no_reply_sender,
     normalize_domain,
     word_count,
 )
@@ -92,6 +94,7 @@ def analyze_email(email: str, domain: str) -> Dict:
     intent_profile = classify_intent_clarity(email)
     confidence_killers = detect_confidence_killers(email)
     automation_profile = automation_signal_score(email)
+    email_type_profile = detect_email_type(email)
 
     sending_pattern_risk = too_many_links or bool(aggressive_tone_terms) or short_generic_email
 
@@ -118,6 +121,9 @@ def analyze_email(email: str, domain: str) -> Dict:
         "automation_level": automation_profile["level"],
         "automation_score": automation_profile["score"],
         "template_markers": automation_profile["template_markers"],
+        "email_type": email_type_profile["type"],
+        "email_type_reason": email_type_profile["reason"],
+        "is_no_reply_sender": is_no_reply_sender(email),
     }
 
     scored = score_risk(signals)

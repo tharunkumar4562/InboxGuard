@@ -42,6 +42,40 @@ PERSONALIZATION_MARKERS = {
     "about your",
 }
 
+TRANSACTIONAL_MARKERS = {
+    "receipt",
+    "invoice",
+    "order",
+    "verification",
+    "verify",
+    "otp",
+    "password reset",
+    "security alert",
+    "login attempt",
+}
+
+MARKETING_MARKERS = {
+    "unsubscribe",
+    "manage preferences",
+    "view in browser",
+    "newsletter",
+    "new feature",
+    "limited time",
+    "offer",
+    "promotion",
+    "discount",
+}
+
+COLD_OUTREACH_MARKERS = {
+    "quick question",
+    "are you open",
+    "would you be open",
+    "just following up",
+    "can i share",
+    "can we chat",
+    "book a quick call",
+}
+
 
 def normalize_domain(domain: str) -> str:
     value = domain.strip().lower()
@@ -74,6 +108,56 @@ def email_body_without_headers(text: str) -> str:
     lines = text.splitlines()
     body_lines = [line for line in lines if not re.match(r"^\s*(from|to|subject):", line, flags=re.IGNORECASE)]
     return "\n".join(body_lines).strip()
+
+
+def extract_from_email_address(text: str) -> str:
+    match = re.search(
+        r"^\s*From:\s*(?:.*<)?([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})>?",
+        text,
+        flags=re.IGNORECASE | re.MULTILINE,
+    )
+    if not match:
+        return ""
+    return match.group(1).strip().lower()
+
+
+def is_no_reply_sender(text: str) -> bool:
+    from_address = extract_from_email_address(text)
+    if not from_address:
+        return False
+    local_part = from_address.split("@", 1)[0]
+    return local_part in {"noreply", "no-reply", "do-not-reply", "donotreply"}
+
+
+def detect_email_type(text: str) -> Dict[str, str]:
+    content = text.lower()
+    transactional_hits = sum(1 for marker in TRANSACTIONAL_MARKERS if marker in content)
+    marketing_hits = sum(1 for marker in MARKETING_MARKERS if marker in content)
+    cold_hits = sum(1 for marker in COLD_OUTREACH_MARKERS if marker in content)
+    no_reply = is_no_reply_sender(text)
+
+    if transactional_hits >= 2 or (transactional_hits >= 1 and no_reply):
+        return {
+            "type": "transactional",
+            "reason": "Transactional delivery pattern detected from system-notification markers.",
+        }
+
+    if marketing_hits >= 2 or (marketing_hits >= 1 and no_reply):
+        return {
+            "type": "marketing/newsletter",
+            "reason": "Marketing/newsletter pattern detected from broadcast markers.",
+        }
+
+    if cold_hits >= 1:
+        return {
+            "type": "cold outreach",
+            "reason": "Cold outreach pattern detected from opener and CTA language.",
+        }
+
+    return {
+        "type": "cold outreach",
+        "reason": "Defaulting to cold outreach profile when pattern is mixed or unclear.",
+    }
 
 
 def word_count(text: str) -> int:
