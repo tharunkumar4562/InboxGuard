@@ -1,7 +1,7 @@
 from datetime import date
 
 from fastapi import FastAPI, Form, Request
-from fastapi.responses import HTMLResponse, PlainTextResponse, Response
+from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -52,13 +52,18 @@ def home(request: Request):
 
 @app.get("/login", response_class=HTMLResponse)
 def login_page(request: Request):
+    return RedirectResponse(url="/access", status_code=307)
+
+
+@app.get("/access", response_class=HTMLResponse)
+def access_page(request: Request):
     return templates.TemplateResponse(
         "login.html",
         {
             "request": request,
-            "page_title": "Login | InboxGuard",
-            "meta_description": "Login to unlock full InboxGuard remediation reports.",
-            "canonical_url": f"{SITE_URL}/login",
+            "page_title": "Get Access | InboxGuard",
+            "meta_description": "Enter your email to unlock your full InboxGuard remediation report instantly.",
+            "canonical_url": f"{SITE_URL}/access",
         },
     )
 
