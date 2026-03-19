@@ -10,6 +10,7 @@ const leadEmailInput = document.getElementById("lead-email");
 const emailRequestLink = document.getElementById("email-request-link");
 const resultLoading = document.getElementById("result-loading");
 const resultCta = document.getElementById("result-cta");
+const exampleScan = document.getElementById("example-scan");
 
 const pillStyle = {
     "High Risk": {
@@ -60,6 +61,9 @@ function setLoadingState(isLoading) {
     if (isLoading) {
         resultLoading.classList.remove("hidden");
         resultCta.classList.add("hidden");
+        if (exampleScan) {
+            exampleScan.classList.add("hidden");
+        }
         findingsNode.innerHTML = "";
         bandNode.textContent = "Analyzing your copy and domain signals...";
         scoreNode.textContent = "--";
@@ -125,6 +129,9 @@ form.addEventListener("submit", async (event) => {
         resultSection.scrollIntoView({ behavior: "smooth", block: "start" });
     } catch (error) {
         setLoadingState(false);
+        if (exampleScan) {
+            exampleScan.classList.remove("hidden");
+        }
         findingsNode.innerHTML = `<li class="finding-row high">${error.message}</li>`;
         scoreNode.textContent = "--";
         bandNode.textContent = "Scan failed.";
@@ -132,7 +139,7 @@ form.addEventListener("submit", async (event) => {
         resultSection.classList.add("visible");
     } finally {
         submitButton.disabled = false;
-        submitButton.textContent = "Run Risk Check";
+        submitButton.textContent = "Check My Email Risk";
     }
 });
 
