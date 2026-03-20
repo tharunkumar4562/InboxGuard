@@ -107,9 +107,9 @@ def _check_header_mismatch(raw_email: str, expected_domain: str) -> Dict[str, st
     if not from_domain:
         return {
             "from_domain": "",
-            "spf_aligned": False,
-            "header_mismatch": True,
-            "header_note": "No From header found to verify SPF alignment",
+            "spf_aligned": True,
+            "header_mismatch": False,
+            "header_note": "No From header found, so SPF alignment was not evaluated",
         }
 
     aligned = from_domain == expected_domain or from_domain.endswith(f".{expected_domain}")
@@ -129,14 +129,27 @@ def _is_short_generic_email(raw_email: str) -> bool:
     return body_words <= 35 and has_generic_marker
 
 
-def analyze_email(email: str, domain: str, raw_email: str = "") -> Dict:
+def analyze_email(email: str, domain: str, raw_email: str = "", analysis_mode: str = "content") -> Dict:
     clean_domain = normalize_domain(domain)
     source_text = raw_email.strip() or email
-    has_header_evidence = _has_header_evidence(source_text)
-    auth_verifiable = bool(clean_domain and has_header_evidence)
+    mode = (analysis_mode or "content").strip().lower()
+    if mode not in ("content", "full"):
+        mode = "content"
 
-    if auth_verifiable:
-        header_alignment = _check_header_mismatch(source_text, clean_domain)
+    full_mode = mode == "full"
+    has_header_evidence = _has_header_evidence(source_text)
+    auth_verifiable = bool(full_mode and clean_domain)
+
+    if full_mode and clean_domain:
+        if has_header_evidence:
+            header_alignment = _check_header_mismatch(source_text, clean_domain)
+        else:
+            header_alignment = {
+                "from_domain": "",
+                "spf_aligned": True,
+                "header_mismatch": False,
+                "header_note": "From/SPF alignment not checked because full headers were not provided",
+            }
         spf = _check_spf(clean_domain)
         dkim = _check_dkim(clean_domain)
         dmarc = _check_dmarc(clean_domain)
@@ -168,8 +181,9 @@ def analyze_email(email: str, domain: str, raw_email: str = "") -> Dict:
     sending_pattern_risk = too_many_links or bool(aggressive_tone_terms) or short_generic_email
 
     signals = {
+        "analysis_mode": mode,
         "auth_verifiable": auth_verifiable,
-        "analysis_confidence": "high" if auth_verifiable else "medium",
+        "analysis_confidence": "high" if full_mode and clean_domain else "medium",
         "spf": spf,
         "dkim": dkim,
         "dmarc": dmarc,
@@ -208,6 +222,9 @@ def analyze_email(email: str, domain: str, raw_email: str = "") -> Dict:
             "score": scored["score"],
             "risk_band": scored["risk_band"],
             "risk_pill_style": scored.get("risk_pill_style", "high"),
+            "analysis_mode": scored.get("analysis_mode", mode),
+            "analysis_mode_label": scored.get("analysis_mode_label", "Content Only"),
+            "analysis_mode_note": scored.get("analysis_mode_note", "Based on content signals only."),
             "inbox_chance": scored.get("inbox_chance", 50),
             "spam_risk": scored.get("spam_risk", 50),
             "email_type": scored.get("email_type", "email"),

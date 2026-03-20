@@ -135,7 +135,12 @@ def sitemap_xml():
 
 
 @app.post("/analyze")
-def analyze(email: str = Form(""), domain: str = Form(""), raw_email: str = Form("")):
+def analyze(
+    email: str = Form(""),
+    domain: str = Form(""),
+    raw_email: str = Form(""),
+    analysis_mode: str = Form("content"),
+):
     """
     Single Source of Truth enforcement:
     - If raw_email is provided and substantial (>20 chars), use ONLY raw_email
@@ -162,7 +167,11 @@ def analyze(email: str = Form(""), domain: str = Form(""), raw_email: str = Form
     if not parsed_email:
         parsed_email = f"To: {parsed_domain}\n\nNo content provided"
 
-    result = analyze_email(parsed_email, parsed_domain, raw_text)
+    mode = (analysis_mode or "content").strip().lower()
+    if mode not in ("content", "full"):
+        mode = "content"
+
+    result = analyze_email(parsed_email, parsed_domain, raw_text, mode)
     return result
 
 

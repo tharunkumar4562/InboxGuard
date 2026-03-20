@@ -77,6 +77,14 @@ Your message starts here..."></textarea>
                 </div>
                 <button id="switch-to-paste" type="button" class="w-full text-left text-sm font-semibold text-blue-200 transition hover:text-blue-100">Use paste mode instead -></button>
               </div>
+              <div class="rounded-2xl border border-slate-700 bg-slate-950/50 p-3">
+                <label for="analysis-mode" class="mb-2 block text-sm font-semibold text-slate-200">Analysis Mode</label>
+                <select id="analysis-mode" name="analysis_mode" class="w-full rounded-xl border border-slate-700 bg-slate-950/70 p-3 text-sm text-slate-100 outline-none transition focus:border-blue-500">
+                  <option value="content" selected>Content Only (message quality)</option>
+                  <option value="full">Full Deliverability Check (content + SPF/DKIM/DMARC)</option>
+                </select>
+                <p class="mt-2 text-xs text-slate-400">Use the same mode when comparing tests. Full mode can score lower due to domain issues.</p>
+              </div>
               <p class="pt-2 text-sm text-slate-200">Takes 5 seconds. No setup needed.</p>
               <button type="submit" id="run-check" class="my-3 w-full rounded-2xl bg-blue-600 px-6 py-4 text-lg font-bold text-white shadow-lg shadow-blue-900/40 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60">
                 Check Deliverability Risk ->
@@ -94,6 +102,7 @@ Your message starts here..."></textarea>
                 Risk Score: <span id="score" class="text-red-500">Calculating...</span>
               </h3>
               <p id="risk-band" class="mt-1 text-sm text-slate-300">You're likely safe, but some patterns may reduce inbox placement.</p>
+              <p id="analysis-mode-note" class="mt-1 text-xs text-slate-400">Mode details will appear here.</p>
             </div>
             <div id="risk-pill" class="rounded-full border border-red-500/60 bg-red-500/15 px-4 py-1 text-sm font-semibold text-red-100">High Risk</div>
           </div>

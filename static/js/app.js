@@ -17,6 +17,7 @@ const emailQuickInput = document.getElementById("email-quick");
 const rawEmailInput = document.getElementById("raw-email");
 const domainInput = document.getElementById("domain");
 const manualBodyInput = document.getElementById("manual-body");
+const analysisModeInput = document.getElementById("analysis-mode");
 const pasteModeWrap = document.getElementById("paste-mode-wrap");
 const manualModeWrap = document.getElementById("manual-mode-wrap");
 const switchToManual = document.getElementById("switch-to-manual");
@@ -24,6 +25,7 @@ const switchToPaste = document.getElementById("switch-to-paste");
 const scoreBreakdownWrap = document.getElementById("score-breakdown-wrap");
 const scoreBreakdownNode = document.getElementById("score-breakdown");
 const problemSummary = document.getElementById("problem-summary");
+const analysisModeNote = document.getElementById("analysis-mode-note");
 const errorBanner = document.createElement("div");
 errorBanner.id = "error-banner";
 errorBanner.className = "hidden fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-red-500/90 text-white px-6 py-3 rounded-lg shadow-lg font-semibold";
@@ -134,6 +136,9 @@ function setLoadingState(isLoading) {
         }
         findingsNode.innerHTML = "";
         bandNode.textContent = "Analyzing your email...";
+        if (analysisModeNote) {
+            analysisModeNote.textContent = "Preparing mode-specific analysis...";
+        }
         scoreNode.textContent = "Calculating...";
         if (problemSummary) {
             problemSummary.classList.add("hidden");
@@ -167,13 +172,12 @@ function renderRisk(summary) {
     const spamRisk = summary.spam_risk || 28;
     const emailType = summary.email_type || "email";
     const emailTypeConfidence = summary.email_type_confidence || 72;
+    const modeLabel = summary.analysis_mode_label || "Content Only";
+    const modeDetail = summary.analysis_mode_note || "Based on content signals only.";
 
-    if (label.includes("Likely Inbox")) {
-        bandNode.textContent = `Inbox chance: ~${inboxChance}% • Spam risk: ~${spamRisk}% • Email type: ${emailType} (${emailTypeConfidence}%)`;
-    } else if (label.includes("May hit")) {
-        bandNode.textContent = `Inbox chance: ~${inboxChance}% • Spam risk: ~${spamRisk}% • Email type: ${emailType} (${emailTypeConfidence}%)`;
-    } else {
-        bandNode.textContent = `Inbox chance: ~${inboxChance}% • Spam risk: ~${spamRisk}% • Email type: ${emailType} (${emailTypeConfidence}%)`;
+    bandNode.textContent = `Inbox chance: ~${inboxChance}% • Spam risk: ~${spamRisk}% • Email type: ${emailType} (${emailTypeConfidence}%)`;
+    if (analysisModeNote) {
+        analysisModeNote.textContent = `${modeLabel}: ${modeDetail}`;
     }
 
     scoreNode.classList.remove("text-red-500", "text-blue-400", "text-emerald-400", "text-yellow-400");
@@ -284,6 +288,7 @@ form.addEventListener("submit", async (event) => {
     let finalRawEmail = rawText;
     let finalEmail = quickText;
     let finalDomain = domainText;
+    const selectedMode = analysisModeInput ? analysisModeInput.value : "content";
     if (useManualFields && manualBodyText) {
         const subjectLine = finalEmail || "No subject";
         finalEmail = `Subject: ${subjectLine}\n\n${manualBodyText}`;
@@ -307,6 +312,7 @@ form.addEventListener("submit", async (event) => {
             payload.set("email", finalEmail);
             payload.set("domain", finalDomain);
         }
+        payload.set("analysis_mode", selectedMode);
 
         const [response] = await Promise.all([
             fetch("/analyze", {
