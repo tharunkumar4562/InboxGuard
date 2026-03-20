@@ -207,6 +207,12 @@ def analyze_email(email: str, domain: str, raw_email: str = "") -> Dict:
         "summary": {
             "score": scored["score"],
             "risk_band": scored["risk_band"],
+            "risk_pill_style": scored.get("risk_pill_style", "high"),
+            "inbox_chance": scored.get("inbox_chance", 50),
+            "spam_risk": scored.get("spam_risk", 50),
+            "email_type": scored.get("email_type", "email"),
+            "email_type_confidence": scored.get("email_type_confidence", 72),
+            "detected_signals": scored.get("detected_signals", []),
             "risk_points": scored["risk_points"],
             "breakdown": scored["breakdown"],
         },

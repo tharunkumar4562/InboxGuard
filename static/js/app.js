@@ -38,13 +38,17 @@ const pillStyle = {
         cls: "border-red-500/60 bg-red-500/15 text-red-100",
         scoreCls: "text-red-500",
     },
-    "Moderate Risk": {
-        cls: "border-blue-500/60 bg-blue-500/15 text-blue-100",
-        scoreCls: "text-blue-400",
+    "⚠️ May hit Promotions/Spam": {
+        cls: "border-yellow-500/60 bg-yellow-500/15 text-yellow-100",
+        scoreCls: "text-yellow-400",
     },
-    "Low Risk": {
+    "Likely Inbox": {
         cls: "border-emerald-500/60 bg-emerald-500/15 text-emerald-100",
         scoreCls: "text-emerald-400",
+    },
+    "❌ Likely Spam": {
+        cls: "border-red-500/60 bg-red-500/15 text-red-100",
+        scoreCls: "text-red-500",
     },
 };
 
@@ -67,6 +71,26 @@ function renderFindings(findings) {
             <p>${consequence}</p>
     `;
         findingsNode.appendChild(li);
+    });
+}
+
+function renderDetectedSignals(signals) {
+    const detectedNode = document.getElementById("detected-signals");
+    if (!detectedNode) {
+        return;
+    }
+
+    detectedNode.innerHTML = "";
+
+    if (!signals || signals.length === 0) {
+        detectedNode.innerHTML = '<li>No specific signals detected</li>';
+        return;
+    }
+
+    signals.forEach((signal) => {
+        const li = document.createElement("li");
+        li.textContent = signal;
+        detectedNode.appendChild(li);
     });
 }
 
@@ -134,18 +158,25 @@ function updateLeadLinks(domain) {
 
 function renderRisk(summary) {
     const label = summary.risk_band;
-    const variant = pillStyle[label] || pillStyle["High Risk"];
+    const variant = pillStyle[label] || pillStyle["❌ Likely Spam"];
 
     scoreNode.textContent = `${summary.score}/100`;
-    if (label === "Low Risk") {
-        bandNode.textContent = "You're likely safe, but some patterns may reduce inbox placement.";
-    } else if (label === "Moderate Risk") {
-        bandNode.textContent = "You're likely safe, but some patterns may reduce inbox placement.";
+
+    // NEW: Use user-facing metrics
+    const inboxChance = summary.inbox_chance || 72;
+    const spamRisk = summary.spam_risk || 28;
+    const emailType = summary.email_type || "email";
+    const emailTypeConfidence = summary.email_type_confidence || 72;
+
+    if (label.includes("Likely Inbox")) {
+        bandNode.textContent = `Inbox chance: ~${inboxChance}% • Spam risk: ~${spamRisk}% • Email type: ${emailType} (${emailTypeConfidence}%)`;
+    } else if (label.includes("May hit")) {
+        bandNode.textContent = `Inbox chance: ~${inboxChance}% • Spam risk: ~${spamRisk}% • Email type: ${emailType} (${emailTypeConfidence}%)`;
     } else {
-        bandNode.textContent = "High deliverability risk detected. Revise this email before sending.";
+        bandNode.textContent = `Inbox chance: ~${inboxChance}% • Spam risk: ~${spamRisk}% • Email type: ${emailType} (${emailTypeConfidence}%)`;
     }
 
-    scoreNode.classList.remove("text-red-500", "text-blue-400", "text-emerald-400");
+    scoreNode.classList.remove("text-red-500", "text-blue-400", "text-emerald-400", "text-yellow-400");
     scoreNode.classList.add(variant.scoreCls);
 
     if (scoreBarFill) {
@@ -292,6 +323,7 @@ form.addEventListener("submit", async (event) => {
         const data = await response.json();
         renderRisk(data.summary);
         renderBreakdown(data.summary);
+        renderDetectedSignals(data.summary.detected_signals);
         renderFindings(data.partial_findings);
         updateLeadLinks(data.domain);
         if (lockedFixes) {

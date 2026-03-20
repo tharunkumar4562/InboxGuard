@@ -1,16 +1,26 @@
-from typing import Dict, List
+from typing import Dict, List, Optional
 import random
 
 
 def score_risk(signals: Dict) -> Dict:
     risk_points = 0
-    findings: List[Dict[str, str]] = []
+    findings: List[Dict[str, Optional[str]]] = []
     breakdown: List[Dict[str, str | int]] = []
+    detected_signals: List[str] = []  # NEW: Track detected signals for evidence section
     score = 65  # Baseline: above Moderate Risk threshold (60) to allow variance downward
 
     email_type = signals.get("email_type", "cold outreach")
     auth_verifiable = signals.get("auth_verifiable", False)
     confidence = signals.get("analysis_confidence", "medium")
+    
+    # Calculate email type confidence (based on how clear the signals are)
+    email_type_confidence = 72  # Default
+    if email_type == "cold outreach" and signals.get("automation_level") == "high":
+        email_type_confidence = 85
+    elif email_type == "transactional" and signals.get("is_no_reply_sender"):
+        email_type_confidence = 88
+    elif email_type == "marketing/newsletter" and signals.get("email_type_reason"):
+        email_type_confidence = 78
 
     # NO AGGRESSIVE WEIGHTING - real penalties apply uniformly
     def add_penalty(points: int, label: str, reason: str, category: str = "content"):
@@ -28,25 +38,41 @@ def score_risk(signals: Dict) -> Dict:
         score += points
         breakdown.append({"label": label, "points": points, "reason": reason})
 
-    findings.append(
-        {
-            "severity": "low",
-            "title": "Email type detected",
-            "issue": f"This looks like a {email_type.replace('/', ' / ')}.",
-            "impact": signals.get("email_type_reason", "").replace("Scoring weights adjusted by email category", "This affects how spam filters treat your email"),
-            "fix": None,
-        }
-    )
-
-    findings.append(
-        {
-            "severity": "low",
-            "title": "Sender verification status",
-            "issue": f"{'✅ Full headers provided - sender identity can be verified' if auth_verifiable else '⚠️ Partial email pasted - some authentication checks not available'}" ,
-            "impact": "Full headers let us verify you're really the sender. Partial email limits our checks.",
-            "fix": "Paste complete email including headers for full verification." if not auth_verifiable else None,
-        }
-    )
+    # === NEW: ACTIONABLE FINDINGS START HERE ===
+    # Replace abstract "email type detected" + "verification status" with REAL problems
+    
+    # Signal 1: PERSONALIZATION CHECK
+    link_count = signals.get("link_count", 0)
+    has_personalization = any(marker in signals.get("email_type_reason", "").lower() 
+                              for marker in ["noticed", "saw your", "about your", "personali"])
+    
+    if email_type == "cold outreach" and not has_personalization:
+        detected_signals.append("• No personalization detected (looks like bulk email)")
+        findings.append({
+            "severity": "high",
+            "title": "No personalization detected",
+            "issue": "This looks like a bulk email template without recipient-specific context.",
+            "impact": "Bulk patterns are immediately flagged by Gmail and Outlook filters.",
+            "fix": "Add specific details: mention their company, recent activity, or something unique about them.",
+        })
+    elif has_personalization:
+        detected_signals.append("✅ Personalized message (targeted)")
+    
+    # Signal 2: PROMOTIONAL LANGUAGE
+    spam_terms = signals.get("spam_terms") or []
+    if spam_terms:
+        detected_signals.append(f"• {len(spam_terms)} promotional phrases detected ({', '.join(spam_terms[:2])})")
+    
+    # Signal 3: URGENCY/AGGRESSIVE LANGUAGE
+    aggressive_terms = signals.get("aggressive_tone_terms") or []
+    if aggressive_terms:
+        detected_signals.append(f"• Contains urgency language (can trigger filters)")
+    
+    # Signal 4: LINK COUNT
+    if link_count > 0:
+        detected_signals.append(f"• {link_count} link{'s' if link_count != 1 else ''}")
+    else:
+        detected_signals.append("• 0 links (clean, focused)")
 
     if email_type == "transactional":
         add_boost(25, "Transactional profile", "System/receipt emails have legitimate requirements and lower spam-risk baseline")
@@ -57,16 +83,25 @@ def score_risk(signals: Dict) -> Dict:
     elif email_type == "cold outreach":
         # Cold outreach has high scrutiny; minimal boost
         add_boost(0, "Cold outreach profile", "First-touch outreach receives heightened filtering scrutiny")
-
-    if signals.get("is_no_reply_sender") and email_type in ("transactional", "marketing/newsletter", "informational/system"):
-        add_boost(5, "System sender pattern", "No-reply address is expected for system notifications")
-
-    if not auth_verifiable:
-        add_penalty(3, "Limited authentication evidence", "Headers are incomplete, so authentication confidence is constrained")
-
-    # === CRITICAL CONTENT VARIANCE SIGNALS (NEW) ===
-    # These create the REAL scoring variance
     
+    # Add domain health finding if headers available
+    if auth_verifiable:
+        findings.append({
+            "severity": "low",
+            "title": "✅ Full headers provided",
+            "issue": "Complete email headers allow us to verify authentication status.",
+            "impact": "We can check SPF, DKIM, DMARC and confirm your sender identity.",
+            "fix": None,
+        })
+    else:
+        findings.append({
+            "severity": "low",
+            "title": "⚠️ Partial email pasted",
+            "issue": "Headers are not complete, so some authentication checks are limited.",
+            "impact": "We can analyze content patterns but cannot verify domain infrastructure.",
+            "fix": "Paste complete email including all headers for full infrastructure verification.",
+        })
+
     # 1. PROMOTIONAL WORD DENSITY (major signal)
     spam_terms = signals.get("spam_terms") or []
     if spam_terms:
@@ -270,13 +305,6 @@ def score_risk(signals: Dict) -> Dict:
             "fix": "Add one explicit question or low-friction ask.",
         })
 
-    high_seen = 0
-    for item in findings:
-        if item.get("severity") == "high":
-            high_seen += 1
-            if high_seen > 3:
-                item["severity"] = "medium"
-
     score = max(35, min(95, score))
     
     # Add micro-randomness to prevent pattern detection
@@ -284,17 +312,32 @@ def score_risk(signals: Dict) -> Dict:
     score += random.randint(-2, 2)
     score = max(35, min(95, score))
 
+    # === NEW: CONVERT SCORE TO USER-FACING METRICS ===
+    # Map score to real-world outcomes
+    inbox_chance = max(5, min(95, (score - 10) * 1.1))  # Convert to approximately 0-95%
+    spam_risk = 100 - inbox_chance
+    
+    # NEW: Risk labels that mean something to users
     if score >= 80:
-        band = "Low Risk"
+        risk_band = "Likely Inbox"
+        risk_pill_style = "low"
     elif score >= 60:
-        band = "Moderate Risk"
+        risk_band = "⚠️ May hit Promotions/Spam"
+        risk_pill_style = "medium"
     else:
-        band = "High Risk"
+        risk_band = "❌ Likely Spam"
+        risk_pill_style = "high"
 
     return {
         "score": score,
-        "risk_band": band,
+        "risk_band": risk_band,
+        "risk_pill_style": risk_pill_style,
+        "inbox_chance": round(inbox_chance),
+        "spam_risk": round(spam_risk),
+        "email_type": email_type,
+        "email_type_confidence": email_type_confidence,
         "risk_points": risk_points,
         "breakdown": breakdown,
         "findings": findings,
+        "detected_signals": detected_signals,
     }
