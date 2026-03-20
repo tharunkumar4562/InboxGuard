@@ -4,10 +4,12 @@ from typing import Dict, List, Optional
 def score_risk(signals: Dict) -> Dict:
     risk_points = 0
     infra_penalty_points = 0
+    content_penalty_points = 0
     findings: List[Dict[str, Optional[str]]] = []
     breakdown: List[Dict[str, str | int]] = []
     detected_signals: List[str] = []
-    score = 72
+    score = 64
+    max_content_penalty = 24
 
     email_type = signals.get("email_type", "cold outreach")
     mode = signals.get("analysis_mode", "content")
@@ -30,7 +32,17 @@ def score_risk(signals: Dict) -> Dict:
     )
 
     def add_penalty(points: int, label: str, reason: str, category: str = "content"):
-        nonlocal risk_points, score, infra_penalty_points
+        nonlocal risk_points, score, infra_penalty_points, content_penalty_points
+        if points <= 0:
+            return
+
+        if category == "content":
+            remaining = max_content_penalty - content_penalty_points
+            if remaining <= 0:
+                return
+            points = min(points, remaining)
+            content_penalty_points += points
+
         risk_points += points
         if category == "infra":
             infra_penalty_points += points
@@ -73,13 +85,13 @@ def score_risk(signals: Dict) -> Dict:
         detected_signals.append("• Personalization detected")
 
     if has_subject and 40 <= body_word_count <= 260:
-        add_boost(6, "Clear structure", "Subject + readable body length detected")
+        add_boost(8, "Clear structure", "Subject + readable body length detected")
 
     if not spam_terms:
         add_boost(5, "No promotional spam terms", "Copy avoids common trigger phrases")
 
     if not aggressive_terms:
-        add_boost(5, "Neutral tone", "No urgency pressure terms detected")
+        add_boost(4, "Neutral tone", "No urgency pressure terms detected")
 
     if email_type == "cold outreach" and not has_personalization:
         add_penalty(12, "No personalization", "Looks like bulk email instead of 1:1 outreach")
@@ -99,14 +111,17 @@ def score_risk(signals: Dict) -> Dict:
         add_penalty(promo_penalty, "Promotional phrasing", f"Found: {', '.join(spam_terms[:3])}", category="content")
         detected_signals.append(f"• {len(spam_terms)} promotional phrase(s) ({', '.join(spam_terms[:2])})")
 
+    normalized_cta = {p.strip().lower() for p in cta_phrases}
+    non_overlap_urgency = [t for t in aggressive_terms if t.strip().lower() not in normalized_cta]
+
+    cta_penalty = 0
+    urgency_penalty = 0
     if cta_phrases:
         cta_penalty = min(10, 6 + max(0, len(cta_phrases) - 1) * 2)
-        add_penalty(cta_penalty, "CTA intent phrases", f"Found: {', '.join(cta_phrases[:3])}", category="content")
         detected_signals.append(f"• CTA phrases detected ({', '.join(cta_phrases[:2])})")
 
-    if aggressive_terms:
-        urgency_penalty = min(12, len(aggressive_terms) * 6)
-        add_penalty(urgency_penalty, "Urgency language", f"Found: {', '.join(aggressive_terms[:2])}", category="content")
+    if non_overlap_urgency:
+        urgency_penalty = min(10, len(non_overlap_urgency) * 6)
         detected_signals.append("• Uses urgency language (can trigger spam filters)")
         findings.append(
             {
@@ -116,6 +131,20 @@ def score_risk(signals: Dict) -> Dict:
                 "impact": "Urgency-heavy language increases filtering risk.",
                 "fix": "Replace urgency words with clear, neutral timing and a calm CTA.",
             }
+        )
+
+    pressure_penalty = max(cta_penalty, urgency_penalty)
+    if pressure_penalty:
+        reason_parts: List[str] = []
+        if cta_phrases:
+            reason_parts.append(f"CTA: {', '.join(cta_phrases[:2])}")
+        if non_overlap_urgency:
+            reason_parts.append(f"Urgency: {', '.join(non_overlap_urgency[:2])}")
+        add_penalty(
+            pressure_penalty,
+            "CTA/Urgency pressure",
+            " | ".join(reason_parts),
+            category="content",
         )
 
     if signals.get("too_many_links", False):
@@ -165,7 +194,7 @@ def score_risk(signals: Dict) -> Dict:
     elif email_type == "marketing/newsletter":
         add_boost(3, "Newsletter profile", "Broadcast pattern recognized")
     elif email_type == "informational/system":
-        add_boost(4, "Informational profile", "Announcement/system style recognized")
+        add_boost(6, "Informational profile", "Announcement/system style recognized")
 
     # Infra checks only in full mode
     if full_mode:
@@ -237,6 +266,16 @@ def score_risk(signals: Dict) -> Dict:
         detected_signals.append("• Domain-level checks skipped (Content Only mode)")
 
     content_score = max(35, min(95, score + infra_penalty_points))
+
+    if content_score >= 80 and infra_penalty_points > 0:
+        relief = min(6, max(1, round(infra_penalty_points * 0.25)))
+        score += relief
+        breakdown.append({
+            "label": "High-quality content relief",
+            "points": relief,
+            "reason": "Strong content softens infrastructure drag in heuristic scoring",
+        })
+
     score = max(35, min(95, score))
 
     if score >= 80:
