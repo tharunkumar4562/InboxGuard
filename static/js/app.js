@@ -171,16 +171,13 @@ function renderRisk(summary) {
 
     scoreNode.textContent = `${summary.score}/100`;
 
-    // NEW: Use user-facing metrics
-    const inboxChance = summary.inbox_chance || 72;
-    const spamRisk = summary.spam_risk || 28;
     const emailType = summary.email_type || "email";
     const emailTypeConfidence = summary.email_type_confidence || 72;
     const modeLabel = summary.analysis_mode_label || "Content Only";
     const modeDetail = summary.analysis_mode_note || "Based on content signals only.";
     const capabilityNote = summary.capability_note || "Based on content + domain checks only (no real inbox placement testing).";
 
-    bandNode.textContent = `Inbox chance: ~${inboxChance}% • Spam risk: ~${spamRisk}% • Email type: ${emailType} (${emailTypeConfidence}%)`;
+    bandNode.textContent = `Heuristic risk index: ${summary.score}/100 (not inbox probability) • Email type: ${emailType} (${emailTypeConfidence}%)`;
     if (analysisModeNote) {
         analysisModeNote.textContent = `${modeLabel}: ${modeDetail}`;
     }

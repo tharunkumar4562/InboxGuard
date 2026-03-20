@@ -61,7 +61,7 @@ def _check_spf(domain: str) -> Dict[str, str]:
 
 
 def _check_dkim(domain: str) -> Dict[str, str]:
-    # Common selector fallback for lightweight checks.
+    # Legacy fallback only; preferred path is header-based selector checks.
     for candidate in domain_candidates(domain):
         status = _txt_record_status(f"default._domainkey.{candidate}", "v=DKIM1")
         if status == "found":
@@ -106,6 +106,16 @@ def _check_blacklist_status(domain: str) -> Dict:
             answers = dns.resolver.resolve(query_domain, "A", lifetime=2.0)
             if answers:
                 blacklist_hits.append(dnsbl.split(".")[0].upper())  # Extract provider name
+        except dns.resolver.NXDOMAIN:
+            # Expected when domain is not listed.
+            pass
+        except dns.resolver.NoAnswer:
+            # Not listed on this DNSBL.
+            pass
+        except dns.exception.Timeout:
+            had_unknown = True
+        except dns.resolver.NoNameservers:
+            had_unknown = True
         except (dns.exception.DNSException, Exception):
             had_unknown = True
     
@@ -154,6 +164,32 @@ def _check_header_mismatch(raw_email: str, expected_domain: str) -> Dict[str, st
     }
 
 
+def _extract_dkim_selector_info(raw_email: str) -> Dict[str, str]:
+    signature = re.search(r"^\s*DKIM-Signature:\s*(.+)$", raw_email, flags=re.IGNORECASE | re.MULTILINE)
+    if not signature:
+        return {"selector": "", "domain": ""}
+
+    payload = signature.group(1)
+    selector_match = re.search(r"(?:^|;)\s*s=([^;\s]+)", payload, flags=re.IGNORECASE)
+    domain_match = re.search(r"(?:^|;)\s*d=([^;\s]+)", payload, flags=re.IGNORECASE)
+
+    selector = selector_match.group(1).strip().lower() if selector_match else ""
+    dkim_domain = normalize_domain(domain_match.group(1)) if domain_match else ""
+    return {"selector": selector, "domain": dkim_domain}
+
+
+def _check_dkim_from_headers(raw_email: str) -> Dict[str, str]:
+    details = _extract_dkim_selector_info(raw_email)
+    selector = details.get("selector", "")
+    dkim_domain = details.get("domain", "")
+
+    if not selector or not dkim_domain:
+        return {"status": "not_verifiable", "domain": ""}
+
+    status = _txt_record_status(f"{selector}._domainkey.{dkim_domain}", "v=DKIM1")
+    return {"status": status, "domain": dkim_domain}
+
+
 def _is_short_generic_email(raw_email: str) -> bool:
     body = email_body_without_headers(raw_email).lower()
     body_words = word_count(body)
@@ -190,6 +226,8 @@ def analyze_email(email: str, domain: str, raw_email: str = "", analysis_mode: s
     clean_domain = normalized["domain"]
     source_text = normalized["source"]
     normalized_email = normalized["email"]
+    normalized_subject = normalized["subject"]
+    normalized_body = normalized["body"]
     mode = (analysis_mode or "content").strip().lower()
     if mode not in ("content", "full"):
         mode = "content"
@@ -201,6 +239,7 @@ def analyze_email(email: str, domain: str, raw_email: str = "", analysis_mode: s
     if full_mode and clean_domain:
         if has_header_evidence:
             header_alignment = _check_header_mismatch(source_text, clean_domain)
+            dkim_result = _check_dkim_from_headers(source_text)
         else:
             header_alignment = {
                 "from_domain": "",
@@ -208,8 +247,8 @@ def analyze_email(email: str, domain: str, raw_email: str = "", analysis_mode: s
                 "header_mismatch": False,
                 "header_note": "From/SPF alignment not checked because full headers were not provided",
             }
+            dkim_result = {"status": "not_verifiable", "domain": clean_domain}
         spf_result = _check_spf(clean_domain)
-        dkim_result = _check_dkim(clean_domain)
         dmarc_result = _check_dmarc(clean_domain)
         blacklist_status = _check_blacklist_status(clean_domain)
     else:
@@ -258,6 +297,8 @@ def analyze_email(email: str, domain: str, raw_email: str = "", analysis_mode: s
         "header_mismatch": header_alignment["header_mismatch"],
         "header_note": header_alignment["header_note"],
         "spam_terms": find_spam_terms(normalized_email),
+        "has_subject": bool(normalized_subject),
+        "body_word_count": word_count(normalized_body),
         "link_count": link_count,
         "too_many_links": too_many_links,
         "cta_phrases": cta_phrases,
@@ -295,8 +336,6 @@ def analyze_email(email: str, domain: str, raw_email: str = "", analysis_mode: s
                 "capability_note",
                 "Based on content and optional domain checks only. No real inbox placement testing is performed.",
             ),
-            "inbox_chance": scored.get("inbox_chance", 50),
-            "spam_risk": scored.get("spam_risk", 50),
             "email_type": scored.get("email_type", "email"),
             "email_type_confidence": scored.get("email_type_confidence", 72),
             "content_score": scored.get("content_score", scored["score"]),

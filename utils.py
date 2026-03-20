@@ -108,11 +108,8 @@ def normalize_domain(domain: str) -> str:
 
     value = value.replace("https://", "").replace("http://", "").split("/")[0]
     value = value.strip("<>()[]{}.,;\"' ")
-
-    # If user passed full email instead of domain, keep the host part only.
     if "@" in value:
         value = value.rsplit("@", 1)[-1]
-
     return value
 
 
@@ -125,7 +122,6 @@ def root_domain(domain: str) -> str:
     if len(parts) <= 2:
         return clean
 
-    # Lightweight effective-root fallback used for DNS checks.
     two_level_suffixes = {"co.uk", "org.uk", "com.au", "co.in"}
     suffix = ".".join(parts[-2:])
     if suffix in two_level_suffixes and len(parts) >= 3:
@@ -347,7 +343,6 @@ def extract_domain_from_text(text: str) -> str:
     if from_match:
         return normalize_domain(from_match.group(1))
 
-    # Fallback: find any email address in the pasted text.
     email_match = re.search(r"[A-Z0-9._%+-]+@([A-Z0-9.-]+\.[A-Z]{2,})", text, flags=re.IGNORECASE)
     if email_match:
         return normalize_domain(email_match.group(1))

@@ -59,11 +59,27 @@ def score_risk(signals: Dict) -> Dict:
     aggressive_terms = signals.get("aggressive_tone_terms") or []
     link_count = int(signals.get("link_count", 0))
     confidence_killers = signals.get("confidence_killers") or []
+    body_word_count = int(signals.get("body_word_count", 0))
+    has_subject = bool(signals.get("has_subject", False))
 
     has_personalization = any(
         marker in (signals.get("email_type_reason", "").lower())
         for marker in ["noticed", "saw your", "about your", "personali"]
     )
+
+    # Positive signals first: this improves score spread so good emails can actually score high.
+    if has_personalization:
+        add_boost(8, "Personalization detected", "Recipient-specific context detected")
+        detected_signals.append("• Personalization detected")
+
+    if has_subject and 40 <= body_word_count <= 260:
+        add_boost(6, "Clear structure", "Subject + readable body length detected")
+
+    if not spam_terms:
+        add_boost(5, "No promotional spam terms", "Copy avoids common trigger phrases")
+
+    if not aggressive_terms:
+        add_boost(5, "Neutral tone", "No urgency pressure terms detected")
 
     if email_type == "cold outreach" and not has_personalization:
         add_penalty(12, "No personalization", "Looks like bulk email instead of 1:1 outreach")
@@ -84,12 +100,12 @@ def score_risk(signals: Dict) -> Dict:
         detected_signals.append(f"• {len(spam_terms)} promotional phrase(s) ({', '.join(spam_terms[:2])})")
 
     if cta_phrases:
-        cta_penalty = min(12, 8 + max(0, len(cta_phrases) - 1) * 2)
+        cta_penalty = min(10, 6 + max(0, len(cta_phrases) - 1) * 2)
         add_penalty(cta_penalty, "CTA intent phrases", f"Found: {', '.join(cta_phrases[:3])}", category="content")
         detected_signals.append(f"• CTA phrases detected ({', '.join(cta_phrases[:2])})")
 
     if aggressive_terms:
-        urgency_penalty = min(20, len(aggressive_terms) * 10)
+        urgency_penalty = min(12, len(aggressive_terms) * 6)
         add_penalty(urgency_penalty, "Urgency language", f"Found: {', '.join(aggressive_terms[:2])}", category="content")
         detected_signals.append("• Uses urgency language (can trigger spam filters)")
         findings.append(
@@ -180,7 +196,7 @@ def score_risk(signals: Dict) -> Dict:
             add_penalty(16, "Domain blacklist status", f"Listed on {lists}", category="infra")
             detected_signals.append(f"• Domain listed on blacklist(s): {lists}")
         elif blacklist_status.get("status") == "unknown":
-            detected_signals.append("• Blacklist lookup unavailable")
+            detected_signals.append("• Blacklist check skipped (network-limited)")
         else:
             detected_signals.append("• Blacklist: not detected")
 
@@ -197,8 +213,10 @@ def score_risk(signals: Dict) -> Dict:
             detected_signals.append("• SPF found")
 
         if dkim_status == "missing":
-            add_penalty(8, "DKIM missing", f"Default selector not found on {signals.get('dkim_checked_domain', 'domain')}", category="infra")
-            detected_signals.append("• DKIM missing")
+            add_penalty(6, "DKIM record missing", f"Selector record not found on {signals.get('dkim_checked_domain', 'domain')}", category="infra")
+            detected_signals.append("• DKIM record missing")
+        elif dkim_status == "not_verifiable":
+            detected_signals.append("• DKIM not verifiable (requires signed headers)")
         elif dkim_status == "unknown":
             detected_signals.append("• DKIM lookup unavailable")
         else:
@@ -221,9 +239,6 @@ def score_risk(signals: Dict) -> Dict:
     content_score = max(35, min(95, score + infra_penalty_points))
     score = max(35, min(95, score))
 
-    inbox_chance = max(5, min(95, round(score * 0.9)))
-    spam_risk = 100 - inbox_chance
-
     if score >= 80:
         risk_band = "Likely Inbox"
         risk_pill_style = "low"
@@ -238,8 +253,6 @@ def score_risk(signals: Dict) -> Dict:
         "score": score,
         "risk_band": risk_band,
         "risk_pill_style": risk_pill_style,
-        "inbox_chance": inbox_chance,
-        "spam_risk": spam_risk,
         "email_type": email_type,
         "email_type_confidence": email_type_confidence,
         "analysis_mode": mode,
