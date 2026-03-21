@@ -73,7 +73,7 @@ def score_risk(signals: Dict) -> Dict:
     link_count = int(signals.get("link_count", 0))
     confidence_killers = signals.get("confidence_killers") or []
     body_word_count = int(signals.get("body_word_count", 0))
-    has_subject = bool(signals.get("has_subject", False))
+    subject_length = int(signals.get("subject_length", 0))
 
     has_personalization = any(
         marker in (signals.get("email_type_reason", "").lower())
@@ -85,10 +85,13 @@ def score_risk(signals: Dict) -> Dict:
         add_boost(8, "Personalization detected", "Recipient-specific context detected")
         detected_signals.append("• Personalization detected")
 
-    if has_subject:
-        add_boost(4, "Subject present", "A clear subject improves trust signals")
-        if 40 <= body_word_count <= 260:
-            add_boost(4, "Readable body length", "Body length is in a healthy outreach range")
+    structure_score = 0
+    if subject_length > 5:
+        structure_score += 5
+    if 50 <= body_word_count <= 320:
+        structure_score += 5
+    if structure_score:
+        add_boost(structure_score, "Clear structure", "Subject/body structure quality detected")
 
     if not spam_terms:
         add_boost(8, "Clean content", "Copy avoids common trigger phrases")

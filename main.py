@@ -139,6 +139,8 @@ def analyze(
     email: str = Form(""),
     domain: str = Form(""),
     raw_email: str = Form(""),
+    manual_subject: str = Form(""),
+    manual_body: str = Form(""),
     analysis_mode: str = Form("content"),
 ):
     """
@@ -150,6 +152,8 @@ def analyze(
     raw_text = raw_email.strip()
     email_text = email.strip()
     domain_text = domain.strip()
+    manual_subject_text = manual_subject.strip()
+    manual_body_text = manual_body.strip()
 
     # Determine which source to use
     use_raw = len(raw_text) > 20
@@ -158,9 +162,16 @@ def analyze(
         # ONLY use raw_email, ignore manual fields
         parsed_email = build_email_from_raw(raw_text, fallback_email="")
         parsed_domain = extract_domain_from_text(raw_text) or ""
+        parsed_subject = ""
+        parsed_body = ""
     else:
         # ONLY use manual fields
-        parsed_email = email_text or ""
+        parsed_subject = manual_subject_text or email_text
+        parsed_body = manual_body_text
+        if parsed_subject and parsed_body:
+            parsed_email = f"Subject: {parsed_subject}\n\n{parsed_body}"
+        else:
+            parsed_email = email_text or parsed_body or ""
         parsed_domain = domain_text or ""
 
     # Guarantee fallback: ensure we have something to analyze
@@ -171,7 +182,14 @@ def analyze(
     if mode not in ("content", "full"):
         mode = "content"
 
-    result = analyze_email(parsed_email, parsed_domain, raw_text, mode)
+    result = analyze_email(
+        parsed_email,
+        parsed_domain,
+        raw_text,
+        mode,
+        subject_override=parsed_subject,
+        body_override=parsed_body,
+    )
     return result
 
 

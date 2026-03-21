@@ -291,6 +291,7 @@ form.addEventListener("submit", async (event) => {
     const rawText = rawEmailInput ? rawEmailInput.value.trim() : "";
     const domainText = domainInput ? domainInput.value.trim() : "";
     const manualBodyText = manualBodyInput ? manualBodyInput.value.trim() : "";
+    const manualSubjectText = quickText;
 
     const useRawEmail = currentInputMode === "paste";
     const useManualFields = currentInputMode === "manual";
@@ -331,6 +332,8 @@ form.addEventListener("submit", async (event) => {
             // ONLY send manual fields, no raw_email
             payload.set("email", finalEmail);
             payload.set("domain", finalDomain);
+            payload.set("manual_subject", manualSubjectText);
+            payload.set("manual_body", manualBodyText);
         }
         payload.set("analysis_mode", selectedMode);
 

@@ -198,10 +198,29 @@ def _is_short_generic_email(raw_email: str) -> bool:
     return body_words <= 35 and has_generic_marker
 
 
-def _normalized_input(email: str, domain: str, raw_email: str) -> Dict[str, str]:
+def _normalize_text(value: str) -> str:
+    return re.sub(r"\s+", " ", (value or "")).strip()
+
+
+def _extract_subject_header_only(text: str) -> str:
+    match = re.search(r"^\s*Subject:\s*(.+)$", text or "", flags=re.IGNORECASE | re.MULTILINE)
+    return _normalize_text(match.group(1)) if match else ""
+
+
+def _normalized_input(email: str, domain: str, raw_email: str, subject_override: str = "", body_override: str = "") -> Dict[str, str]:
     source_text = raw_email.strip() or email
-    subject = extract_subject_from_raw(source_text)
-    body = email_body_without_headers(source_text) or source_text
+    explicit_subject = _normalize_text(subject_override)
+    explicit_body = _normalize_text(body_override)
+
+    if explicit_subject:
+        subject = explicit_subject
+    elif raw_email.strip():
+        # For raw emails, trust only explicit Subject header to avoid parser drift.
+        subject = _extract_subject_header_only(source_text)
+    else:
+        subject = _normalize_text(extract_subject_from_raw(source_text))
+
+    body = explicit_body or _normalize_text(email_body_without_headers(source_text) or source_text)
 
     parsed_domain = normalize_domain(domain)
     if not parsed_domain:
@@ -221,8 +240,15 @@ def _normalized_input(email: str, domain: str, raw_email: str) -> Dict[str, str]
     }
 
 
-def analyze_email(email: str, domain: str, raw_email: str = "", analysis_mode: str = "content") -> Dict:
-    normalized = _normalized_input(email, domain, raw_email)
+def analyze_email(
+    email: str,
+    domain: str,
+    raw_email: str = "",
+    analysis_mode: str = "content",
+    subject_override: str = "",
+    body_override: str = "",
+) -> Dict:
+    normalized = _normalized_input(email, domain, raw_email, subject_override, body_override)
     clean_domain = normalized["domain"]
     source_text = normalized["source"]
     normalized_email = normalized["email"]
@@ -298,6 +324,7 @@ def analyze_email(email: str, domain: str, raw_email: str = "", analysis_mode: s
         "header_note": header_alignment["header_note"],
         "spam_terms": find_spam_terms(normalized_email),
         "has_subject": bool(normalized_subject),
+        "subject_length": len((normalized_subject or "").strip()),
         "body_word_count": word_count(normalized_body),
         "link_count": link_count,
         "too_many_links": too_many_links,
