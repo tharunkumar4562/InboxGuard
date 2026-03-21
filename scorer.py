@@ -256,6 +256,7 @@ def score_risk(signals: Dict) -> Dict:
                 }
             )
         else:
+            add_penalty(2, "Verification incomplete", "Full mode requested without enough verifiable domain/header evidence", category="infra")
             findings.append(
                 {
                     "severity": "low",
@@ -292,6 +293,7 @@ def score_risk(signals: Dict) -> Dict:
             add_penalty(6, "DKIM record missing", f"Selector record not found on {signals.get('dkim_checked_domain', 'domain')}", category="infra")
             detected_signals.append("• DKIM record missing")
         elif dkim_status == "not_verifiable":
+            add_penalty(2, "DKIM not verifiable", "Signed headers/selector were not available for strict DKIM validation", category="infra")
             detected_signals.append("• DKIM not verifiable (requires signed headers)")
         elif dkim_status == "unknown":
             detected_signals.append("• DKIM lookup unavailable")
@@ -324,6 +326,10 @@ def score_risk(signals: Dict) -> Dict:
         })
 
     score = max(35, min(95, score))
+
+    # Ensure infra penalties are visible in full mode even near score ceiling.
+    if full_mode and infra_penalty_points > 0:
+        score = min(score, 95 - min(6, infra_penalty_points))
 
     if score >= 80:
         risk_band = "Likely Inbox"
