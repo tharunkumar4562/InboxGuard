@@ -30,6 +30,10 @@ const finalScoreNode = document.getElementById("final-score-value");
 const problemSummary = document.getElementById("problem-summary");
 const analysisModeNote = document.getElementById("analysis-mode-note");
 const capabilityNoteNode = document.getElementById("capability-note");
+const confidenceValueNode = document.getElementById("confidence-value");
+const confidenceNoteNode = document.getElementById("confidence-note");
+const topFixesListNode = document.getElementById("top-fixes-list");
+const providerViewListNode = document.getElementById("provider-view-list");
 const errorBanner = document.createElement("div");
 errorBanner.id = "error-banner";
 errorBanner.className = "hidden fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-red-500/90 text-white px-6 py-3 rounded-lg shadow-lg font-semibold";
@@ -184,6 +188,13 @@ function renderRisk(summary) {
     if (capabilityNoteNode) {
         capabilityNoteNode.textContent = capabilityNote;
     }
+    if (confidenceValueNode) {
+        const confidence = (summary.deliverability_confidence || "medium").toUpperCase();
+        confidenceValueNode.textContent = confidence;
+    }
+    if (confidenceNoteNode) {
+        confidenceNoteNode.textContent = summary.confidence_note || "Confidence depends on available authentication evidence.";
+    }
 
     scoreNode.classList.remove("text-red-500", "text-blue-400", "text-emerald-400", "text-yellow-400");
     scoreNode.classList.add(variant.scoreCls);
@@ -198,6 +209,52 @@ function renderRisk(summary) {
 
     if (problemSummary) {
         problemSummary.classList.remove("hidden");
+    }
+}
+
+function renderTopFixes(summary) {
+    if (!topFixesListNode) {
+        return;
+    }
+
+    topFixesListNode.innerHTML = "";
+    const fixes = summary.top_fixes || [];
+    if (!fixes.length) {
+        topFixesListNode.innerHTML = "<li>- No urgent fixes identified for this input.</li>";
+        return;
+    }
+
+    fixes.forEach((item) => {
+        const li = document.createElement("li");
+        const impact = Math.round((Number(item.impact) || 0) * 100);
+        li.textContent = `- ${item.type} (${impact}% impact): ${item.fix}`;
+        topFixesListNode.appendChild(li);
+    });
+}
+
+function renderProviderView(summary) {
+    if (!providerViewListNode) {
+        return;
+    }
+
+    providerViewListNode.innerHTML = "";
+    const providerResults = summary.provider_results || {};
+    const providers = ["gmail", "outlook", "yahoo"];
+
+    providers.forEach((provider) => {
+        const data = providerResults[provider];
+        if (!data) {
+            return;
+        }
+
+        const li = document.createElement("li");
+        const label = provider.charAt(0).toUpperCase() + provider.slice(1);
+        li.textContent = `- ${label}: ${data.status} (${data.score}/100), top issue: ${data.top_issue}`;
+        providerViewListNode.appendChild(li);
+    });
+
+    if (!providerViewListNode.children.length) {
+        providerViewListNode.innerHTML = "<li>- Provider-specific breakdown unavailable for this mode/input.</li>";
     }
 }
 
@@ -352,6 +409,8 @@ form.addEventListener("submit", async (event) => {
         const data = await response.json();
         renderRisk(data.summary);
         renderBreakdown(data.summary);
+        renderTopFixes(data.summary);
+        renderProviderView(data.summary);
         renderDetectedSignals(data.summary.detected_signals);
         renderFindings(data.partial_findings);
         updateLeadLinks(data.domain);

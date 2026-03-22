@@ -341,6 +341,164 @@ def score_risk(signals: Dict) -> Dict:
         risk_band = "❌ Likely Spam"
         risk_pill_style = "high"
 
+    spf_status = signals.get("spf_status", "not_checked")
+    dkim_status = signals.get("dkim_status", "not_checked")
+    dmarc_status = signals.get("dmarc_status", "not_checked")
+    spf_aligned = bool(signals.get("spf_aligned", False))
+    blacklist_status = signals.get("blacklist_status", {})
+    blacklisted = bool(blacklist_status.get("blacklisted", False))
+
+    if not full_mode:
+        deliverability_confidence = "medium"
+        confidence_note = "Content-only mode: sender authentication confidence is not fully verified."
+    else:
+        if blacklisted or spf_status == "missing" or not spf_aligned:
+            deliverability_confidence = "low"
+            confidence_note = "Authentication or sender reputation has high uncertainty/risk."
+        elif dkim_status in ("missing", "not_verifiable") or dmarc_status in ("missing", "unknown"):
+            deliverability_confidence = "medium"
+            confidence_note = "Content looks strong, but authentication verification is partial."
+        elif spf_status == "found" and dkim_status == "found" and dmarc_status == "found":
+            deliverability_confidence = "high"
+            confidence_note = "Authentication checks are complete and aligned."
+        else:
+            deliverability_confidence = "medium"
+            confidence_note = "Some infrastructure checks are inconclusive."
+
+    issues: List[Dict[str, object]] = []
+
+    def impact_value(issue: Dict[str, object]) -> float:
+        value = issue.get("impact", 0.0)
+        if isinstance(value, (int, float)):
+            return float(value)
+        return 0.0
+
+    def add_issue(issue_type: str, impact: float, fix: str, reason: str, providers: List[str] | None = None):
+        issues.append(
+            {
+                "type": issue_type,
+                "impact": impact,
+                "fix": fix,
+                "reason": reason,
+                "providers": providers or ["all"],
+            }
+        )
+
+    if spam_terms:
+        add_issue(
+            "spam_phrases",
+            0.35,
+            "Remove promotional phrases and replace with neutral wording.",
+            f"Found trigger phrases: {', '.join(spam_terms[:3])}",
+            ["gmail", "yahoo", "outlook"],
+        )
+
+    if cta_phrases or non_overlap_urgency:
+        add_issue(
+            "aggressive_cta",
+            0.3,
+            "Reduce pressure words and use one calm, specific CTA.",
+            "Urgency/CTA language is commonly associated with promotional filtering.",
+            ["gmail", "yahoo", "outlook"],
+        )
+
+    if signals.get("too_many_links", False) or link_count >= 2 or signals.get("tracking_style_links", False):
+        add_issue(
+            "link_density",
+            0.4,
+            "Limit to one clean link and avoid tracking-heavy parameters.",
+            "High link density and tracking style links increase promotional footprint.",
+            ["gmail", "yahoo", "outlook"],
+        )
+
+    if full_mode:
+        if blacklisted:
+            add_issue(
+                "blacklisted_domain",
+                1.0,
+                "Resolve blacklist listings before campaign launch.",
+                "Domain appears on one or more DNSBL providers.",
+                ["gmail", "yahoo", "outlook"],
+            )
+
+        if spf_status == "missing":
+            add_issue(
+                "spf_missing",
+                0.9,
+                "Publish an SPF record and include your sending infrastructure.",
+                "SPF is required for sender validation.",
+                ["gmail", "yahoo", "outlook"],
+            )
+        elif spf_status == "found" and not spf_aligned:
+            add_issue(
+                "spf_misaligned",
+                0.85,
+                "Align From domain with SPF-authenticated sending domain.",
+                "SPF exists but alignment fails for this sender identity.",
+                ["gmail", "yahoo", "outlook"],
+            )
+
+        if dkim_status == "missing":
+            add_issue(
+                "dkim_missing",
+                0.8,
+                "Configure DKIM signing for your sending domain.",
+                "DKIM signature verification cannot be completed.",
+                ["gmail", "yahoo", "outlook"],
+            )
+        elif dkim_status == "not_verifiable":
+            add_issue(
+                "dkim_not_verifiable",
+                0.45,
+                "Send with signed headers or provide full raw headers for validation.",
+                "DKIM selector/signature is not fully verifiable in this input.",
+                ["gmail", "yahoo", "outlook"],
+            )
+
+        if dmarc_status == "missing":
+            add_issue(
+                "dmarc_missing",
+                0.7,
+                "Publish a DMARC policy to protect sender reputation.",
+                "DMARC policy is required for stronger domain trust.",
+                ["gmail", "yahoo", "outlook"],
+            )
+
+    unique_fixes = {}
+    for item in sorted(issues, key=impact_value, reverse=True):
+        key = item["type"]
+        if key not in unique_fixes:
+            unique_fixes[key] = item
+    top_fixes = list(unique_fixes.values())[:3]
+
+    provider_results: Dict[str, Dict[str, object]] = {}
+    provider_list = ["gmail", "outlook", "yahoo"]
+    provider_base_score = content_score if not full_mode else score
+
+    for provider in provider_list:
+        provider_issues: List[Dict[str, object]] = []
+        for issue in issues:
+            providers = issue.get("providers", ["all"])
+            if isinstance(providers, list) and (provider in providers or "all" in providers):
+                provider_issues.append(issue)
+
+        provider_penalty = sum(int(round(impact_value(issue) * 8)) for issue in provider_issues)
+        provider_score = max(35, min(95, provider_base_score - provider_penalty))
+
+        if provider_score >= 80:
+            provider_status = "likely_inbox"
+        elif provider_score >= 60:
+            provider_status = "at_risk"
+        else:
+            provider_status = "high_risk"
+
+        provider_top_issue = str(provider_issues[0].get("type", "none")) if provider_issues else "none"
+        provider_results[provider] = {
+            "score": provider_score,
+            "status": provider_status,
+            "top_issue": provider_top_issue,
+        }
+
     return {
         "score": score,
         "risk_band": risk_band,
@@ -355,6 +513,10 @@ def score_risk(signals: Dict) -> Dict:
         "content_score": content_score,
         "infra_impact": -infra_penalty_points,
         "final_score": score,
+        "deliverability_confidence": deliverability_confidence,
+        "confidence_note": confidence_note,
+        "top_fixes": top_fixes,
+        "provider_results": provider_results,
         "risk_points": risk_points,
         "breakdown": breakdown,
         "findings": findings,

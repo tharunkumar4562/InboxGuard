@@ -129,6 +129,26 @@ Your message starts here..."></textarea>
 
           <p id="capability-note" class="mt-4 text-sm font-semibold text-slate-200">Based on content + domain checks only (no real inbox placement testing).</p>
 
+          <div id="confidence-wrap" class="mt-4 rounded-2xl border border-slate-700/80 bg-slate-950/55 p-4">
+            <p class="text-sm font-semibold text-slate-100">Deliverability confidence</p>
+            <p id="confidence-value" class="mt-1 text-sm text-slate-200">-</p>
+            <p id="confidence-note" class="mt-1 text-xs text-slate-400">-</p>
+          </div>
+
+          <div id="top-fixes-wrap" class="mt-4 rounded-2xl border border-slate-700/80 bg-slate-950/55 p-4">
+            <p class="text-sm font-semibold text-slate-100">Fix this first</p>
+            <ul id="top-fixes-list" class="mt-2 space-y-2 text-sm text-slate-200">
+              <li>- Analyzing fix priorities...</li>
+            </ul>
+          </div>
+
+          <div id="provider-view-wrap" class="mt-4 rounded-2xl border border-slate-700/80 bg-slate-950/55 p-4">
+            <p class="text-sm font-semibold text-slate-100">Provider view</p>
+            <ul id="provider-view-list" class="mt-2 space-y-1 text-sm text-slate-200">
+              <li>- Analyzing provider-specific risk...</li>
+            </ul>
+          </div>
+
           <div id="score-breakdown-wrap" class="mt-5 hidden rounded-2xl border border-slate-700/80 bg-slate-950/55 p-4">
             <p class="text-sm font-semibold text-slate-100">Score breakdown</p>
             <div id="score-summary-lines" class="mt-2 space-y-1 text-sm text-slate-200">
