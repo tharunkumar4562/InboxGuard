@@ -366,6 +366,9 @@ def score_risk(signals: Dict) -> Dict:
             confidence_note = "Some infrastructure checks are inconclusive."
 
     issues: List[Dict[str, object]] = []
+    has_list_unsubscribe_marker = bool(signals.get("has_list_unsubscribe_marker", False))
+    tracking_style_links = bool(signals.get("tracking_style_links", False))
+    too_many_links = bool(signals.get("too_many_links", False))
 
     def impact_value(issue: Dict[str, object]) -> float:
         value = issue.get("impact", 0.0)
@@ -373,13 +376,21 @@ def score_risk(signals: Dict) -> Dict:
             return float(value)
         return 0.0
 
-    def add_issue(issue_type: str, impact: float, fix: str, reason: str, providers: List[str] | None = None):
+    def add_issue(
+        issue_type: str,
+        title: str,
+        impact: float,
+        action: str,
+        why: str,
+        providers: List[str] | None = None,
+    ):
         issues.append(
             {
                 "type": issue_type,
+                "title": title,
                 "impact": impact,
-                "fix": fix,
-                "reason": reason,
+                "action": action,
+                "why": why,
                 "providers": providers or ["all"],
             }
         )
@@ -387,81 +398,110 @@ def score_risk(signals: Dict) -> Dict:
     if spam_terms:
         add_issue(
             "spam_phrases",
+            "Promotional phrasing detected",
             0.35,
-            "Remove promotional phrases and replace with neutral wording.",
-            f"Found trigger phrases: {', '.join(spam_terms[:3])}",
-            ["gmail", "yahoo", "outlook"],
+            "Replace promotional terms with neutral, specific wording.",
+            f"Found trigger phrases: {', '.join(spam_terms[:3])}. These are frequently associated with promotional filtering.",
+            ["gmail", "yahoo"],
         )
 
     if cta_phrases or non_overlap_urgency:
         add_issue(
             "aggressive_cta",
+            "CTA pressure is high",
             0.3,
-            "Reduce pressure words and use one calm, specific CTA.",
-            "Urgency/CTA language is commonly associated with promotional filtering.",
+            "Use one low-pressure CTA and remove urgency wording.",
+            "Urgency-heavy CTA patterns are often treated as campaign-style mail.",
             ["gmail", "yahoo", "outlook"],
         )
 
-    if signals.get("too_many_links", False) or link_count >= 2 or signals.get("tracking_style_links", False):
+    if too_many_links or link_count >= 2 or tracking_style_links:
         add_issue(
             "link_density",
+            "Link footprint is high",
             0.4,
-            "Limit to one clean link and avoid tracking-heavy parameters.",
-            "High link density and tracking style links increase promotional footprint.",
+            "Limit to one clean link and remove heavy tracking parameters.",
+            "High link density/tracking parameters increase promotional classification risk.",
             ["gmail", "yahoo", "outlook"],
+        )
+
+    if tracking_style_links:
+        add_issue(
+            "tracking_link_reputation",
+            "Tracking-style URL pattern",
+            0.3,
+            "Use direct destination URLs without redirect-style tracking params.",
+            "Tracking and redirect-style URLs reduce trust with provider filters.",
+            ["gmail"],
+        )
+
+    if email_type in ("marketing/newsletter", "cold outreach") and link_count >= 1 and not has_list_unsubscribe_marker:
+        add_issue(
+            "missing_list_unsubscribe",
+            "List-Unsubscribe signal missing",
+            0.55,
+            "Add visible unsubscribe/manage-preferences controls for campaign-style mail.",
+            "Outlook is stricter on list-unsubscribe signals for non-transactional sends.",
+            ["outlook"],
         )
 
     if full_mode:
         if blacklisted:
             add_issue(
                 "blacklisted_domain",
+                "Domain appears on blacklist",
                 1.0,
-                "Resolve blacklist listings before campaign launch.",
-                "Domain appears on one or more DNSBL providers.",
+                "Resolve blacklist listings and warm reputation before sending campaigns.",
+                "Mailbox providers strongly penalize listed sender domains.",
                 ["gmail", "yahoo", "outlook"],
             )
 
         if spf_status == "missing":
             add_issue(
                 "spf_missing",
+                "SPF is missing",
                 0.9,
-                "Publish an SPF record and include your sending infrastructure.",
-                "SPF is required for sender validation.",
+                "Publish SPF and include all approved sending hosts.",
+                "Without SPF, providers cannot validate sender authorization.",
                 ["gmail", "yahoo", "outlook"],
             )
         elif spf_status == "found" and not spf_aligned:
             add_issue(
                 "spf_misaligned",
+                "SPF found but not aligned",
                 0.85,
-                "Align From domain with SPF-authenticated sending domain.",
-                "SPF exists but alignment fails for this sender identity.",
+                "Align From domain with the SPF-authenticated envelope domain.",
+                "Alignment failures reduce domain trust even when SPF exists.",
                 ["gmail", "yahoo", "outlook"],
             )
 
         if dkim_status == "missing":
             add_issue(
                 "dkim_missing",
+                "DKIM signing missing",
                 0.8,
-                "Configure DKIM signing for your sending domain.",
-                "DKIM signature verification cannot be completed.",
+                "Enable DKIM signing at your sender (ESP/mail provider).",
+                "Missing DKIM weakens cryptographic sender authenticity checks.",
                 ["gmail", "yahoo", "outlook"],
             )
         elif dkim_status == "not_verifiable":
             add_issue(
                 "dkim_not_verifiable",
+                "DKIM cannot be fully verified",
                 0.45,
-                "Send with signed headers or provide full raw headers for validation.",
-                "DKIM selector/signature is not fully verifiable in this input.",
+                "Send with full signed headers or verify selector configuration in your ESP.",
+                "Providers cannot fully confirm DKIM authenticity from this input.",
                 ["gmail", "yahoo", "outlook"],
             )
 
         if dmarc_status == "missing":
             add_issue(
                 "dmarc_missing",
+                "DMARC policy missing",
                 0.7,
-                "Publish a DMARC policy to protect sender reputation.",
-                "DMARC policy is required for stronger domain trust.",
-                ["gmail", "yahoo", "outlook"],
+                "Publish DMARC policy (start with p=none, then enforce as reputation stabilizes).",
+                "DMARC provides policy-level alignment and spoofing protection signals.",
+                ["yahoo", "outlook"],
             )
 
     unique_fixes = {}
@@ -470,6 +510,18 @@ def score_risk(signals: Dict) -> Dict:
         if key not in unique_fixes:
             unique_fixes[key] = item
     top_fixes = list(unique_fixes.values())[:3]
+
+    if not top_fixes:
+        top_fixes = [
+            {
+                "type": "improve_personalization",
+                "title": "Optional improvement: add personalization",
+                "impact": 0.15,
+                "action": "Reference recipient context (role/company/recent event) in opener.",
+                "why": "Context-specific intros often improve trust and reply likelihood.",
+                "providers": ["all"],
+            }
+        ]
 
     provider_results: Dict[str, Dict[str, object]] = {}
     provider_list = ["gmail", "outlook", "yahoo"]
@@ -482,7 +534,7 @@ def score_risk(signals: Dict) -> Dict:
             if isinstance(providers, list) and (provider in providers or "all" in providers):
                 provider_issues.append(issue)
 
-        provider_penalty = sum(int(round(impact_value(issue) * 8)) for issue in provider_issues)
+        provider_penalty = sum(int(round(impact_value(issue) * 10)) for issue in provider_issues)
         provider_score = max(35, min(95, provider_base_score - provider_penalty))
 
         if provider_score >= 80:
@@ -492,7 +544,11 @@ def score_risk(signals: Dict) -> Dict:
         else:
             provider_status = "high_risk"
 
-        provider_top_issue = str(provider_issues[0].get("type", "none")) if provider_issues else "none"
+        if provider_issues:
+            best_issue = max(provider_issues, key=impact_value)
+            provider_top_issue = str(best_issue.get("title", "No major provider-specific issue"))
+        else:
+            provider_top_issue = "No major provider-specific issue"
         provider_results[provider] = {
             "score": provider_score,
             "status": provider_status,

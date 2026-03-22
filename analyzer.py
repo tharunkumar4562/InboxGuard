@@ -12,6 +12,7 @@ from utils import (
     detect_email_type,
     detect_confidence_killers,
     detect_tracking_style_links,
+    detect_list_unsubscribe_marker,
     domain_candidates,
     email_body_without_headers,
     extract_domain_from_text,
@@ -301,6 +302,7 @@ def analyze_email(
     automation_profile = automation_signal_score(normalized_email)
     email_type_profile = detect_email_type(normalized_email)
     cta_phrases = detect_cta_phrases(normalized_email)
+    has_list_unsubscribe_marker = detect_list_unsubscribe_marker(normalized_email)
 
     sending_pattern_risk = too_many_links or bool(aggressive_tone_terms) or short_generic_email
 
@@ -329,6 +331,7 @@ def analyze_email(
         "link_count": link_count,
         "too_many_links": too_many_links,
         "cta_phrases": cta_phrases,
+        "has_list_unsubscribe_marker": has_list_unsubscribe_marker,
         "tracking_style_links": tracking_style_links,
         "excessive_caps": has_excessive_caps(normalized_email),
         "aggressive_tone_terms": aggressive_tone_terms,

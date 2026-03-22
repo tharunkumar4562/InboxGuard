@@ -227,7 +227,10 @@ function renderTopFixes(summary) {
     fixes.forEach((item) => {
         const li = document.createElement("li");
         const impact = Math.round((Number(item.impact) || 0) * 100);
-        li.textContent = `- ${item.type} (${impact}% impact): ${item.fix}`;
+        const title = item.title || item.type || "Issue";
+        const why = item.why || "This can reduce deliverability confidence.";
+        const action = item.action || "Review and resolve before sending.";
+        li.textContent = `- ${title} (${impact}% impact) | Why: ${why} | Fix: ${action}`;
         topFixesListNode.appendChild(li);
     });
 }

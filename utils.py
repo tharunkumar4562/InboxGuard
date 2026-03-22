@@ -289,6 +289,17 @@ def detect_cta_phrases(text: str) -> List[str]:
     return sorted([phrase for phrase in CTA_PHRASES if phrase in content])
 
 
+def detect_list_unsubscribe_marker(text: str) -> bool:
+    content = text.lower()
+    markers = (
+        "unsubscribe",
+        "manage preferences",
+        "opt out",
+        "remove me",
+    )
+    return any(marker in content for marker in markers)
+
+
 def automation_signal_score(text: str) -> Dict[str, object]:
     body = email_body_without_headers(text).lower()
     repeated_phrase_hits = 0
