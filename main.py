@@ -1,17 +1,25 @@
 from datetime import date
+from pathlib import Path
+import logging
 
 from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from jinja2 import TemplateNotFound, TemplateError
 
 from analyzer import analyze_email
 from utils import build_email_from_raw, extract_domain_from_text
 
 app = FastAPI(title="InboxGuard")
 
-app.mount("/static", StaticFiles(directory="static"), name="static")
-templates = Jinja2Templates(directory="templates")
+logger = logging.getLogger("inboxguard")
+BASE_DIR = Path(__file__).resolve().parent
+STATIC_DIR = BASE_DIR / "static"
+TEMPLATES_DIR = BASE_DIR / "templates"
+
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 SITE_URL = "https://inboxguard-production-90ab.up.railway.app"
 LONG_TAIL_PAGES = [
@@ -37,6 +45,28 @@ LONG_TAIL_PAGES = [
 LONG_TAIL_BY_SLUG = {item["slug"]: item for item in LONG_TAIL_PAGES}
 
 
+def render_template_safe(request: Request, template_name: str, context: dict, status_code: int = 200):
+    try:
+        payload = {"request": request, **context}
+        return templates.TemplateResponse(template_name, payload, status_code=status_code)
+    except TemplateNotFound:
+        logger.exception("Template not found: %s", template_name)
+    except TemplateError:
+        logger.exception("Template render error for %s", template_name)
+    except Exception:
+        logger.exception("Unexpected template error for %s", template_name)
+
+    return HTMLResponse(
+        content=(
+            "<!doctype html><html><head><title>InboxGuard</title></head>"
+            "<body><h1>InboxGuard is recovering</h1>"
+            "<p>Please refresh in a minute. If the issue persists, use /health to verify service status.</p>"
+            "</body></html>"
+        ),
+        status_code=503,
+    )
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
@@ -44,10 +74,10 @@ def health() -> dict[str, str]:
 
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request):
-    return templates.TemplateResponse(
+    return render_template_safe(
+        request,
         "index.html",
         {
-            "request": request,
             "page_title": "Email Deliverability Audit | InboxGuard",
             "meta_description": "Run a fast email deliverability audit before sending. Check SPF, DKIM, DMARC, header alignment, and outreach risk signals.",
             "canonical_url": f"{SITE_URL}/",
@@ -63,10 +93,10 @@ def login_page(request: Request):
 
 @app.get("/access", response_class=HTMLResponse)
 def access_page(request: Request):
-    return templates.TemplateResponse(
+    return render_template_safe(
+        request,
         "login.html",
         {
-            "request": request,
             "page_title": "Get Access | InboxGuard",
             "meta_description": "Enter your email to unlock your full InboxGuard remediation report instantly.",
             "canonical_url": f"{SITE_URL}/access",
@@ -78,10 +108,10 @@ def access_page(request: Request):
 def programmatic_page(request: Request, slug: str):
     item = LONG_TAIL_BY_SLUG.get(slug)
     if item is None:
-        return templates.TemplateResponse(
+        return render_template_safe(
+            request,
             "index.html",
             {
-                "request": request,
                 "page_title": "Email Deliverability Audit | InboxGuard",
                 "meta_description": "Run a fast email deliverability audit before sending.",
                 "canonical_url": f"{SITE_URL}/",
@@ -96,10 +126,10 @@ def programmatic_page(request: Request, slug: str):
         "header-alignment analysis, and copy risk diagnostics before you send."
     )
 
-    return templates.TemplateResponse(
+    return render_template_safe(
+        request,
         "landing.html",
         {
-            "request": request,
             "page_title": title,
             "meta_description": description,
             "canonical_url": f"{SITE_URL}/p/{item['slug']}",
