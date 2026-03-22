@@ -17,7 +17,6 @@ logger = logging.getLogger("inboxguard")
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
 TEMPLATES_DIR = BASE_DIR / "templates"
-LAST_TEMPLATE_ERROR = ""
 
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
@@ -47,37 +46,14 @@ LONG_TAIL_BY_SLUG = {item["slug"]: item for item in LONG_TAIL_PAGES}
 
 
 def render_template_safe(request: Request, template_name: str, context: dict, status_code: int = 200):
-    global LAST_TEMPLATE_ERROR
-    LAST_TEMPLATE_ERROR = ""
     payload = {"request": request, **context}
     try:
-        return templates.TemplateResponse(name=template_name, context=payload, status_code=status_code)
-    except Exception as exc:
-        LAST_TEMPLATE_ERROR = f"attempt1: {type(exc).__name__}: {exc}"
-        logger.exception("Template render attempt 1 failed for %s", template_name)
-
-    try:
         return templates.TemplateResponse(request=request, name=template_name, context=payload, status_code=status_code)
-    except Exception as exc:
-        LAST_TEMPLATE_ERROR = f"attempt2: {type(exc).__name__}: {exc}"
-        logger.exception("Template render attempt 2 failed for %s", template_name)
-
-    try:
-        return templates.TemplateResponse(request, template_name, payload, status_code=status_code)
-    except Exception as exc:
-        LAST_TEMPLATE_ERROR = f"attempt3: {type(exc).__name__}: {exc}"
-        logger.exception("Template render attempt 3 failed for %s", template_name)
-
-    try:
-        return templates.TemplateResponse(template_name, payload, status_code=status_code)
-    except TemplateNotFound as exc:
-        LAST_TEMPLATE_ERROR = f"attempt4: {type(exc).__name__}: {exc}"
+    except TemplateNotFound:
         logger.exception("Template not found: %s", template_name)
-    except TemplateError as exc:
-        LAST_TEMPLATE_ERROR = f"attempt4: {type(exc).__name__}: {exc}"
+    except TemplateError:
         logger.exception("Template render error for %s", template_name)
-    except Exception as exc:
-        LAST_TEMPLATE_ERROR = f"attempt4: {type(exc).__name__}: {exc}"
+    except Exception:
         logger.exception("Unexpected template error for %s", template_name)
 
     return HTMLResponse(
@@ -110,18 +86,7 @@ def log_template_environment() -> None:
 
 @app.get("/health")
 def health() -> dict:
-    template_files = sorted([p.name for p in TEMPLATES_DIR.glob("*.html")]) if TEMPLATES_DIR.exists() else []
-    return {
-        "status": "ok",
-        "module_file": str(Path(__file__).resolve()),
-        "base_dir": str(BASE_DIR),
-        "templates_dir": str(TEMPLATES_DIR),
-        "templates_exists": TEMPLATES_DIR.exists(),
-        "template_files": template_files,
-        "static_dir": str(STATIC_DIR),
-        "static_exists": STATIC_DIR.exists(),
-        "last_template_error": LAST_TEMPLATE_ERROR,
-    }
+    return {"status": "ok"}
 
 
 @app.get("/", response_class=HTMLResponse)
