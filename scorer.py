@@ -5,14 +5,16 @@ from typing import Dict, List, Optional
 # This avoids top-end saturation and makes issues materially visible.
 CONTENT_PENALTIES = {
     "spam_phrases": 20,
-    "cta_pressure": 15,
-    "urgency_pressure": 12,
+    "cta_pressure": 20,
+    "urgency_pressure": 14,
     "link_density": 15,
     "tracking_links": 8,
     "short_generic": 10,
-    "cold_no_personalization": 12,
+    "missing_personalization": 8,
     "targeting_unclear": 8,
-    "excessive_caps": 8,
+    "excessive_caps": 12,
+    "exclamation_abuse": 10,
+    "repetitive_structure": 6,
     "confidence_killers": 6,
     "automation_high": 10,
     "missing_list_unsubscribe": 12,
@@ -88,6 +90,9 @@ def score_risk(signals: Dict) -> Dict:
     too_many_links = bool(signals.get("too_many_links", False))
     tracking_style_links = bool(signals.get("tracking_style_links", False))
     short_generic_email = bool(signals.get("short_generic_email", False))
+    exclamation_count = _to_int(signals.get("exclamation_count", 0))
+    repetitive_structure = bool(signals.get("repetitive_structure", False))
+    recipient_name_present = bool(signals.get("recipient_name_present", False))
     confidence_killers = signals.get("confidence_killers") or []
     opener_type = str(signals.get("opener_type", ""))
     intent_type = str(signals.get("intent_type", ""))
@@ -152,7 +157,7 @@ def score_risk(signals: Dict) -> Dict:
         detected_signals.append(f"• Spam terms: {', '.join(spam_terms[:2])}")
 
     if cta_phrases:
-        points = min(25, CONTENT_PENALTIES["cta_pressure"] + max(0, len(cta_phrases) - 1) * 3)
+        points = min(28, CONTENT_PENALTIES["cta_pressure"] + max(0, len(cta_phrases) - 1) * 4)
         add_breakdown("CTA pressure", points, f"CTA terms: {', '.join(cta_phrases[:2])}")
         add_issue(
             "cta_pressure",
@@ -236,6 +241,14 @@ def score_risk(signals: Dict) -> Dict:
         points = CONTENT_PENALTIES["excessive_caps"]
         add_breakdown("Excessive capitalization", points, "All-caps usage detected")
 
+    if exclamation_count > 3:
+        points = min(16, CONTENT_PENALTIES["exclamation_abuse"] + max(0, exclamation_count - 3))
+        add_breakdown("Exclamation abuse", points, f"Detected {exclamation_count} exclamation marks")
+
+    if repetitive_structure:
+        points = CONTENT_PENALTIES["repetitive_structure"]
+        add_breakdown("Repetitive sentence pattern", points, "Low sentence variation suggests template-like copy")
+
     if confidence_killers:
         points = min(12, CONTENT_PENALTIES["confidence_killers"] + len(confidence_killers))
         add_breakdown("Low-trust language", points, "Uncertain or hedging language detected")
@@ -246,9 +259,9 @@ def score_risk(signals: Dict) -> Dict:
         for marker in ["noticed", "saw your", "about your", "personali"]
     )
 
-    if email_type == "cold outreach" and not has_personalization:
-        points = CONTENT_PENALTIES["cold_no_personalization"]
-        add_breakdown("No personalization", points, "Cold outreach without recipient-specific context")
+    if email_type in ("cold outreach", "marketing/newsletter") and not recipient_name_present and not has_personalization:
+        points = CONTENT_PENALTIES["missing_personalization"]
+        add_breakdown("No personalization", points, "Missing recipient-specific naming/context signal")
         add_issue(
             "no_personalization",
             "No personalization detected",
@@ -259,15 +272,15 @@ def score_risk(signals: Dict) -> Dict:
         )
         detected_signals.append("• No personalization detected")
 
-    if opener_type in ("generic", "pattern-based"):
+    if email_type in ("cold outreach", "marketing/newsletter") and opener_type in ("generic", "pattern-based"):
         points = CONTENT_PENALTIES["targeting_unclear"]
         add_breakdown("Generic opener", points, "Opening line appears reusable across many recipients")
 
-    if intent_type in ("no-cta", "vague"):
+    if email_type in ("cold outreach", "marketing/newsletter") and intent_type in ("no-cta", "vague"):
         points = CONTENT_PENALTIES["targeting_unclear"]
         add_breakdown("Vague intent", points, "Call-to-action is vague or missing")
 
-    if signals.get("automation_level") == "high":
+    if email_type in ("cold outreach", "marketing/newsletter") and signals.get("automation_level") == "high":
         points = CONTENT_PENALTIES["automation_high"]
         add_breakdown("Automation footprint", points, "High template/automation markers detected")
 
@@ -420,6 +433,30 @@ def score_risk(signals: Dict) -> Dict:
             "CTA pressure combined with multi-link footprint increases promotional risk.",
         )
 
+    if cta_phrases and link_count >= 1:
+        combo_points += 10
+        add_breakdown(
+            "CTA + link interaction",
+            10,
+            "A direct CTA combined with links raises campaign-style filtering risk.",
+        )
+
+    if len(spam_terms) >= 2:
+        combo_points += 15
+        add_breakdown(
+            "Multi-trigger phrase stack",
+            15,
+            "Multiple spam-like phrases strongly increase promotional classification risk.",
+        )
+
+    if cta_phrases and (bool(spam_terms) or bool(non_overlap_urgency)):
+        combo_points += 10
+        add_breakdown(
+            "CTA + promotional tone",
+            10,
+            "CTA pressure combined with promotional/urgent language creates risk amplification.",
+        )
+
     if spam_terms and signals.get("excessive_caps", False):
         combo_points += 8
         add_breakdown(
@@ -437,9 +474,10 @@ def score_risk(signals: Dict) -> Dict:
         )
 
     # Score computation (no artificial 95 ceiling).
+    baseline_score = 100 if full_mode else 95
     total_penalty = content_penalty_points + infra_penalty_points
-    content_score = _clamp_score(100 - content_penalty_points)
-    final_score = _clamp_score(100 - total_penalty)
+    content_score = _clamp_score(baseline_score - content_penalty_points)
+    final_score = _clamp_score(baseline_score - total_penalty)
 
     # Risk band.
     if final_score >= 80:
@@ -512,7 +550,7 @@ def score_risk(signals: Dict) -> Dict:
                 issue_points += adjusted
                 provider_issues.append({**issue, "points": adjusted})
 
-        provider_score = _clamp_score(100 - issue_points)
+        provider_score = _clamp_score(baseline_score - issue_points)
         if provider_score >= 80:
             provider_status = "likely_inbox"
         elif provider_score >= 60:

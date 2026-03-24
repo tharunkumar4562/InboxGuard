@@ -203,6 +203,36 @@ def _normalize_text(value: str) -> str:
     return re.sub(r"\s+", " ", (value or "")).strip()
 
 
+def _recipient_name_present(text: str) -> bool:
+    # Detect simple named salutations: "Hi Alex," / "Hello Priya,"
+    match = re.search(r"\b(?:hi|hello|dear)\s+([A-Za-z][A-Za-z\-]{1,20})\b", text or "", flags=re.IGNORECASE)
+    if not match:
+        return False
+    token = match.group(1).strip().lower()
+    generic_tokens = {"team", "there", "all", "friend", "sir", "madam", "customer", "user"}
+    return token not in generic_tokens
+
+
+def _repetitive_structure(text: str) -> bool:
+    normalized = str(text or "")
+    sentences = [s.strip().lower() for s in re.split(r"[.!?\n]+", normalized) if s.strip()]
+    if len(sentences) < 3:
+        return False
+
+    starts = []
+    for sentence in sentences:
+        words = [str(w) for w in sentence.split()]
+        if not words:
+            continue
+        starts.append(" ".join(words[:2]))
+
+    if len(starts) < 3:
+        return False
+
+    repeated = len(starts) - len(set(starts))
+    return repeated >= 2
+
+
 def _extract_subject_header_only(text: str) -> str:
     match = re.search(r"^\s*Subject:\s*(.+)$", text or "", flags=re.IGNORECASE | re.MULTILINE)
     return _normalize_text(match.group(1)) if match else ""
@@ -305,6 +335,9 @@ def analyze_email(
     has_list_unsubscribe_marker = detect_list_unsubscribe_marker(normalized_email)
 
     sending_pattern_risk = too_many_links or bool(aggressive_tone_terms) or short_generic_email
+    exclamation_count = normalized_email.count("!")
+    recipient_name_present = _recipient_name_present(normalized_email)
+    repetitive_structure = _repetitive_structure(normalized_body)
 
     signals = {
         "analysis_mode": mode,
@@ -337,6 +370,9 @@ def analyze_email(
         "aggressive_tone_terms": aggressive_tone_terms,
         "short_generic_email": short_generic_email,
         "sending_pattern_risk": sending_pattern_risk,
+        "exclamation_count": exclamation_count,
+        "recipient_name_present": recipient_name_present,
+        "repetitive_structure": repetitive_structure,
         "opener_type": opener_profile["type"],
         "opener_reason": opener_profile["reason"],
         "intent_type": intent_profile["type"],
