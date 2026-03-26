@@ -32,6 +32,9 @@ const analysisModeNote = document.getElementById("analysis-mode-note");
 const capabilityNoteNode = document.getElementById("capability-note");
 const confidenceValueNode = document.getElementById("confidence-value");
 const confidenceNoteNode = document.getElementById("confidence-note");
+const verdictLabelNode = document.getElementById("verdict-label");
+const realWorldRiskNode = document.getElementById("real-world-risk");
+const missingFactorsListNode = document.getElementById("missing-factors-list");
 const topFixesListNode = document.getElementById("top-fixes-list");
 const providerViewListNode = document.getElementById("provider-view-list");
 const errorBanner = document.createElement("div");
@@ -62,21 +65,17 @@ function sendTrackEvent(eventName, target = "", mode = "") {
 }
 
 const pillStyle = {
-    "High Risk": {
+    "High Heuristic Risk": {
         cls: "border-red-500/60 bg-red-500/15 text-red-100",
         scoreCls: "text-red-500",
     },
-    "⚠️ May hit Promotions/Spam": {
+    "Medium Heuristic Risk": {
         cls: "border-yellow-500/60 bg-yellow-500/15 text-yellow-100",
         scoreCls: "text-yellow-400",
     },
-    "Likely Inbox": {
+    "Low Heuristic Risk": {
         cls: "border-emerald-500/60 bg-emerald-500/15 text-emerald-100",
         scoreCls: "text-emerald-400",
-    },
-    "❌ Likely Spam": {
-        cls: "border-red-500/60 bg-red-500/15 text-red-100",
-        scoreCls: "text-red-500",
     },
 };
 
@@ -189,7 +188,7 @@ function updateLeadLinks(domain) {
 
 function renderRisk(summary) {
     const label = summary.risk_band;
-    const variant = pillStyle[label] || pillStyle["❌ Likely Spam"];
+    const variant = pillStyle[label] || pillStyle["Medium Heuristic Risk"];
 
     scoreNode.textContent = `${summary.score}/100`;
 
@@ -200,6 +199,9 @@ function renderRisk(summary) {
     const capabilityNote = summary.capability_note || "Based on content + domain checks only (no real inbox placement testing).";
 
     bandNode.textContent = `Heuristic risk index: ${summary.score}/100 (not inbox probability) • Email type: ${emailType} (${emailTypeConfidence}%)`;
+    if (verdictLabelNode) {
+        verdictLabelNode.textContent = `Verdict: ${summary.verdict_label || "Needs Review Before Send"}`;
+    }
     if (analysisModeNote) {
         analysisModeNote.textContent = `${modeLabel}: ${modeDetail}`;
     }
@@ -212,6 +214,22 @@ function renderRisk(summary) {
     }
     if (confidenceNoteNode) {
         confidenceNoteNode.textContent = summary.confidence_note || "Confidence depends on available authentication evidence.";
+    }
+    if (realWorldRiskNode) {
+        realWorldRiskNode.textContent = summary.real_world_risk || "Unknown (reputation and engagement signals are not analyzed)";
+    }
+    if (missingFactorsListNode) {
+        missingFactorsListNode.innerHTML = "";
+        const missing = summary.missing_factors || [];
+        if (!missing.length) {
+            missingFactorsListNode.innerHTML = "<li>- No additional missing-factor metadata</li>";
+        } else {
+            missing.forEach((item) => {
+                const li = document.createElement("li");
+                li.textContent = `- ${item}`;
+                missingFactorsListNode.appendChild(li);
+            });
+        }
     }
 
     scoreNode.classList.remove("text-red-500", "text-blue-400", "text-emerald-400", "text-yellow-400");
@@ -270,7 +288,13 @@ function renderProviderView(summary) {
 
         const li = document.createElement("li");
         const label = provider.charAt(0).toUpperCase() + provider.slice(1);
-        li.textContent = `- ${label}: ${data.status} (${data.score}/100), top issue: ${data.top_issue}`;
+        const statusMap = {
+            low_risk: "low heuristic risk",
+            medium_risk: "medium heuristic risk",
+            high_risk: "high heuristic risk",
+        };
+        const statusText = statusMap[data.status] || data.status;
+        li.textContent = `- ${label}: ${statusText} (${data.score}/100), top issue: ${data.top_issue}`;
         providerViewListNode.appendChild(li);
     });
 

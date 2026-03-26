@@ -25,7 +25,7 @@ INFRA_PENALTIES = {
     "spf_missing": 35,
     "dkim_missing": 30,
     "dmarc_missing": 20,
-    "dkim_not_verifiable": 22,
+    "dkim_not_verifiable": 15,
     "spf_misaligned": 20,
     "auth_not_verifiable": 8,
 }
@@ -494,30 +494,36 @@ def score_risk(signals: Dict) -> Dict:
     content_score = _clamp_score(baseline_score - content_penalty_points)
     final_score = _clamp_score(baseline_score - total_penalty)
 
-    # Guardrail: partial authentication evidence should not appear as "Likely Inbox" certainty.
-    if full_mode and dkim_status == "not_verifiable" and final_score > 78:
-        uncertainty_delta = final_score - 78
-        infra_penalty_points += uncertainty_delta
-        total_penalty += uncertainty_delta
-        final_score = 78
-        breakdown.append(
-            {
-                "label": "Verification uncertainty cap",
-                "points": -uncertainty_delta,
-                "reason": "Full-mode score capped when DKIM cannot be fully verified from provided headers.",
-            }
-        )
-
-    # Risk band.
+    # Heuristic risk band (not inbox prediction).
     if final_score >= 80:
-        risk_band = "Likely Inbox"
+        risk_band = "Low Heuristic Risk"
         risk_pill_style = "low"
     elif final_score >= 60:
-        risk_band = "⚠️ May hit Promotions/Spam"
+        risk_band = "Medium Heuristic Risk"
         risk_pill_style = "medium"
     else:
-        risk_band = "❌ Likely Spam"
+        risk_band = "High Heuristic Risk"
         risk_pill_style = "high"
+
+    if content_score >= 88 and infra_penalty_points > 0:
+        verdict_label = "Content Safe but Reputation/Infra Dependent"
+    elif content_score >= 88 and infra_penalty_points == 0:
+        verdict_label = "Content Safe (Heuristic)"
+    elif final_score >= 70:
+        verdict_label = "Needs Review Before Send"
+    else:
+        verdict_label = "High Failure Risk - Fix Before Send"
+
+    missing_factors = [
+        "Sender reputation history",
+        "Spam complaint trends",
+        "Engagement behavior (opens/replies/deletes)",
+        "Sending pattern anomalies (volume spikes/warmup)",
+    ]
+
+    real_world_risk = "Unknown (reputation and engagement signals are not analyzed)"
+    if full_mode and infra_penalty_points == 0 and content_penalty_points <= 10:
+        real_world_risk = "Partially known (content+infra look healthy, reputation still unknown)"
 
     # Confidence model.
     if not full_mode:
@@ -581,9 +587,9 @@ def score_risk(signals: Dict) -> Dict:
 
         provider_score = _clamp_score(baseline_score - issue_points)
         if provider_score >= 80:
-            provider_status = "likely_inbox"
+            provider_status = "low_risk"
         elif provider_score >= 60:
-            provider_status = "at_risk"
+            provider_status = "medium_risk"
         else:
             provider_status = "high_risk"
 
@@ -615,7 +621,10 @@ def score_risk(signals: Dict) -> Dict:
         "analysis_mode": mode,
         "analysis_mode_label": mode_label,
         "analysis_mode_note": mode_note,
-        "capability_note": "Based on content and optional domain checks only. No real inbox placement testing is performed.",
+        "verdict_label": verdict_label,
+        "real_world_risk": real_world_risk,
+        "missing_factors": missing_factors,
+        "capability_note": "This is a content+infrastructure heuristic check. It does NOT include sender reputation or engagement signals used by mailbox providers.",
         "infra_included": full_mode,
         "content_score": content_score,
         "infra_impact": -infra_penalty_points,
