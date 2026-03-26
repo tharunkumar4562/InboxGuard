@@ -139,6 +139,18 @@ def _has_header_evidence(raw_email: str) -> bool:
     )
 
 
+def _has_auth_header_evidence(raw_email: str) -> bool:
+    if not raw_email:
+        return False
+    return bool(
+        re.search(
+            r"^\s*(authentication-results|dkim-signature|received-spf|return-path):",
+            raw_email,
+            flags=re.IGNORECASE | re.MULTILINE,
+        )
+    )
+
+
 def _extract_from_domain(raw_email: str) -> str:
     match = re.search(r"^\s*From:\s*(?:.*<)?([A-Z0-9._%+-]+@([A-Z0-9.-]+\.[A-Z]{2,}))>?", raw_email, flags=re.IGNORECASE | re.MULTILINE)
     if not match:
@@ -201,6 +213,22 @@ def _is_short_generic_email(raw_email: str) -> bool:
 
 def _normalize_text(value: str) -> str:
     return re.sub(r"\s+", " ", (value or "")).strip()
+
+
+def _has_generic_greeting(text: str) -> bool:
+    return bool(re.search(r"\b(?:hi|hello|dear)\s+(there|team|all)\b", text or "", flags=re.IGNORECASE))
+
+
+def _has_spam_folder_evidence(text: str) -> bool:
+    content = (text or "").lower()
+    markers = (
+        "why is this message in spam",
+        "report not spam",
+        "identified as spam in the past",
+        "in:spam",
+        "this message is similar to messages that were identified as spam",
+    )
+    return any(marker in content for marker in markers)
 
 
 def _recipient_name_present(text: str) -> bool:
@@ -291,7 +319,8 @@ def analyze_email(
 
     full_mode = mode == "full"
     has_header_evidence = _has_header_evidence(source_text)
-    auth_verifiable = bool(full_mode and clean_domain)
+    has_auth_header_evidence = _has_auth_header_evidence(source_text)
+    auth_verifiable = bool(full_mode and clean_domain and has_auth_header_evidence)
 
     if full_mode and clean_domain:
         if has_header_evidence:
@@ -338,6 +367,8 @@ def analyze_email(
     exclamation_count = normalized_email.count("!")
     recipient_name_present = _recipient_name_present(normalized_email)
     repetitive_structure = _repetitive_structure(normalized_body)
+    generic_greeting = _has_generic_greeting(normalized_email)
+    spam_folder_evidence = _has_spam_folder_evidence(source_text)
 
     signals = {
         "analysis_mode": mode,
@@ -373,6 +404,8 @@ def analyze_email(
         "exclamation_count": exclamation_count,
         "recipient_name_present": recipient_name_present,
         "repetitive_structure": repetitive_structure,
+        "generic_greeting": generic_greeting,
+        "spam_folder_evidence": spam_folder_evidence,
         "opener_type": opener_profile["type"],
         "opener_reason": opener_profile["reason"],
         "intent_type": intent_profile["type"],

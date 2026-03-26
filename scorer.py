@@ -15,6 +15,8 @@ CONTENT_PENALTIES = {
     "excessive_caps": 12,
     "exclamation_abuse": 10,
     "repetitive_structure": 6,
+    "generic_greeting": 8,
+    "spam_folder_evidence": 30,
     "confidence_killers": 6,
     "automation_high": 10,
     "missing_list_unsubscribe": 12,
@@ -27,7 +29,7 @@ INFRA_PENALTIES = {
     "dmarc_missing": 20,
     "dkim_not_verifiable": 15,
     "spf_misaligned": 20,
-    "auth_not_verifiable": 8,
+    "auth_not_verifiable": 18,
 }
 
 
@@ -92,6 +94,8 @@ def score_risk(signals: Dict) -> Dict:
     short_generic_email = bool(signals.get("short_generic_email", False))
     exclamation_count = _to_int(signals.get("exclamation_count", 0))
     repetitive_structure = bool(signals.get("repetitive_structure", False))
+    generic_greeting = bool(signals.get("generic_greeting", False))
+    spam_folder_evidence = bool(signals.get("spam_folder_evidence", False))
     recipient_name_present = bool(signals.get("recipient_name_present", False))
     confidence_killers = signals.get("confidence_killers") or []
     opener_type = str(signals.get("opener_type", ""))
@@ -263,6 +267,22 @@ def score_risk(signals: Dict) -> Dict:
     if repetitive_structure:
         points = CONTENT_PENALTIES["repetitive_structure"]
         add_breakdown("Repetitive sentence pattern", points, "Low sentence variation suggests template-like copy")
+
+    if generic_greeting:
+        points = CONTENT_PENALTIES["generic_greeting"]
+        add_breakdown("Generic greeting", points, "Greeting appears broadcast-style (e.g., 'Hi there' / 'Hi team')")
+
+    if spam_folder_evidence:
+        points = CONTENT_PENALTIES["spam_folder_evidence"]
+        add_breakdown("Known spam-folder evidence", points, "Input includes indicators that this message was already classified as spam")
+        add_issue(
+            "known_spam_evidence",
+            "Message has prior spam-folder evidence",
+            points,
+            "Treat this as high risk: review sender reputation, authentication, and content before re-send.",
+            "Inbox provider already signaled this pattern as spam-like in past classification.",
+            ["gmail", "outlook", "yahoo"],
+        )
 
     if confidence_killers:
         points = min(12, CONTENT_PENALTIES["confidence_killers"] + len(confidence_killers))
@@ -486,6 +506,14 @@ def score_risk(signals: Dict) -> Dict:
             "Tracking footprint spike",
             7,
             "Tracking-style URLs combined with many links reduces trust sharply.",
+        )
+
+    if generic_greeting and email_type in ("marketing/newsletter", "informational/system") and not recipient_name_present:
+        combo_points += 6
+        add_breakdown(
+            "Broadcast-style greeting",
+            6,
+            "Generic greeting without recipient identity suggests broad-send pattern.",
         )
 
     # Score computation (no artificial 95 ceiling).
