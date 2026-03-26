@@ -3,41 +3,40 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>{{ page_title or "InboxGuard | Deliverability Control Center" }}</title>
-    <meta name="description" content="{{ meta_description or 'InboxGuard is a real-time deliverability risk control system. Detect inbox threats before sending.' }}" />
-    <link rel="canonical" href="{{ canonical_url or request.url }}" />
-    <meta property="og:title" content="{{ page_title or 'InboxGuard | Deliverability Control Center' }}" />
-    <meta property="og:description" content="{{ meta_description or 'Detect inbox threats before sending.' }}" />
-    <meta property="og:type" content="website" />
-    <meta property="og:url" content="{{ canonical_url or request.url }}" />
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="{{ page_title or 'InboxGuard | Deliverability Control Center' }}" />
-    <meta name="twitter:description" content="{{ meta_description or 'Detect inbox threats before sending.' }}" />
+    <title>{{ page_title or "InboxGuard | Deliverability Threat Center" }}</title>
+    <meta name="description" content="{{ meta_description or 'InboxGuard detects deliverability threats before email send.' }}" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/static/css/styles.css" />
   </head>
   <body>
-    <main class="page">
-      <section class="hero">
-        <div class="container">
-          <header class="topbar">
-            <div>
-              <p class="brand">INBOXGUARD</p>
-              <p class="tagline">Deliverability Risk Control System</p>
-            </div>
-            <a class="access-link" href="/access">Get Access</a>
-          </header>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand-wrap">
+          <p class="brand">INBOXGUARD</p>
+          <p class="sub">Deliverability Threat Center</p>
+        </div>
+        <nav>
+          <button class="nav-item active" type="button">Dashboard</button>
+          <button class="nav-item" type="button">Threat Scan</button>
+          <button class="nav-item" type="button">Signal Detection</button>
+          <button class="nav-item" type="button">Provider Intel</button>
+          <button class="nav-item" type="button">Action Queue</button>
+          <button class="nav-item" type="button">Reports</button>
+        </nav>
+      </aside>
 
-          <div class="hero-copy">
-            <h1>Email Deliverability Threat Console</h1>
-            <p>Scan this email before it hits spam.</p>
-          </div>
+      <main class="main-area">
+        <header class="topbar">
+          <h1>Email Deliverability Threat Console</h1>
+          <a class="access-link" href="/access">Get Access</a>
+        </header>
 
-          <form id="risk-form" class="input-shell">
+        <section class="scan-panel card">
+          <form id="risk-form" class="scan-form">
             <label class="input-label" for="raw-email">Email Draft Input</label>
-            <textarea id="raw-email" name="raw_email" rows="9" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Paste subject and body here..."></textarea>
+            <textarea id="raw-email" name="raw_email" rows="8" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Paste subject and body here..."></textarea>
 
             <div class="inline-fields">
               <div>
@@ -61,13 +60,14 @@
               <span id="loading-step">Analyzing threat signals...</span>
             </div>
           </form>
-        </div>
-      </section>
+        </section>
 
-      <section id="result" class="dashboard hidden">
-        <div class="container dashboard-stack">
-          <section class="status-overview">
-            <h2>Status Overview</h2>
+        <section id="result" class="dashboard-grid">
+          <section class="status-overview card">
+            <div class="section-head">
+              <h2>Status Overview</h2>
+              <span class="pill">Live</span>
+            </div>
             <div class="status-grid">
               <article class="status-card">
                 <p class="status-label">Risk Status</p>
@@ -141,16 +141,16 @@
 
           <section id="result-cta" class="cta-panel card">
             <p class="workflow-step">Step 1 complete: detection</p>
-            <h3>Step 2: apply the full fix plan</h3>
+            <h3>Step 2: apply full fix plan</h3>
             <a id="unlock-link" href="https://wa.me/?text=I%20want%20to%20unlock%20the%20full%20report%20for%20yourdomain.com" target="_blank" rel="noopener noreferrer" class="btn-primary">Fix Email Now</a>
             <div class="email-row">
               <input id="lead-email" type="email" placeholder="you@company.com" />
               <a id="email-request-link" href="mailto:inboxguard.beta@gmail.com?subject=InboxGuard%20Full%20Fix%20Report%20Request&body=Domain:%20yourdomain.com%0AEmail:%20you@company.com" class="btn-secondary">Send Report Request</a>
             </div>
           </section>
-        </div>
-      </section>
-    </main>
+        </section>
+      </main>
+    </div>
 
     <script src="/static/js/app.js"></script>
   </body>
