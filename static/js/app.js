@@ -99,10 +99,13 @@ function renderFindings(findings) {
         li.className = `finding-row ${item.severity || "medium"}`;
         const title = item.title || "Signal";
         const consequence = item.impact || item.issue || item.message || "Deliverability may be affected.";
+        const sev = item.severity || "medium";
+        const impactText = sev === "high" ? "High Impact" : sev === "low" ? "Low Impact" : "Medium Impact";
 
         li.innerHTML = `
-            <p class="finding-title">- ${title}</p>
-            <p>${consequence}</p>
+            <p class="finding-title">${title}</p>
+            <p class="finding-impact ${sev}">${impactText}</p>
+            <p class="finding-note">${consequence}</p>
     `;
         findingsNode.appendChild(li);
     });
@@ -213,7 +216,7 @@ function renderRisk(summary) {
         const headlineMap = {
             "Content Safe": "Content Looks Safe - Reputation Can Still Override",
             "Needs Review": "Moderate Deliverability Risk Detected",
-            "High Spam-Risk Signals": "High Deliverability Risk - Fix Before Sending",
+            "High Spam-Risk Signals": "High Risk - Likely Spam",
         };
         verdictHeadlineNode.textContent = headlineMap[label] || "Deliverability Risk Assessment";
     }

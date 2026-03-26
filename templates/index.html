@@ -36,7 +36,7 @@
           <a href="/access" class="login-link">Get Access</a>
         </header>
 
-        <section class="hero-block rounded-3xl border border-blue-500/35 bg-slate-900/70 p-6 shadow-2xl shadow-blue-950/30 md:p-8">
+        <section class="hero-block rounded-3xl border border-slate-700/80 bg-slate-900/65 p-6 shadow-2xl shadow-black/40 md:p-8">
           <h1 class="max-w-4xl text-4xl font-bold leading-tight md:text-6xl">Before You Send That Email</h1>
           <p class="mt-4 max-w-3xl text-base text-slate-200 md:text-2xl">Check if it will damage your domain reputation.</p>
           <p class="mt-5 max-w-3xl text-lg text-slate-300">Most cold emails do not fail because of content. They fail because of hidden deliverability signals.</p>
@@ -44,7 +44,7 @@
           <form id="risk-form" class="mt-8 space-y-4">
             <div id="paste-mode-wrap" class="space-y-3">
               <div>
-                <textarea id="raw-email" name="raw_email" rows="9" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" class="w-full rounded-2xl border border-slate-700 bg-slate-950/70 p-4 text-base text-slate-100 outline-none ring-0 transition focus:border-blue-500" placeholder="Paste the email you are about to send"></textarea>
+                <textarea id="raw-email" name="raw_email" rows="9" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" class="w-full rounded-2xl border border-slate-700/80 bg-slate-950/55 p-4 text-base text-slate-100 outline-none ring-0 transition focus:border-blue-500" placeholder="Paste the email you are about to send"></textarea>
               </div>
               <p class="text-sm text-slate-300">Paste the email you&apos;re about to send. We&apos;ll tell you what might break it.</p>
               <div class="form-divider" aria-hidden="true">OR</div>
@@ -77,14 +77,14 @@
               <p class="mt-2 text-xs text-slate-400">Use the same mode when comparing tests. Full mode can score lower due to domain issues.</p>
             </div>
 
-            <button type="submit" id="run-check" class="my-3 w-full rounded-2xl bg-blue-600 px-6 py-4 text-xl font-bold text-white shadow-lg shadow-blue-900/40 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60">
+            <button type="submit" id="run-check" class="run-check-btn my-3 w-full rounded-2xl px-6 py-4 text-xl font-bold text-white shadow-lg transition disabled:cursor-not-allowed disabled:opacity-60">
               Check Before You Burn Your Domain
             </button>
             <p class="pb-2 text-center text-xs text-slate-400">Used by cold email operators to avoid spam placement • Takes 5 seconds • No signup required</p>
           </form>
         </section>
 
-        <section id="result" class="report-light hidden mt-7 rounded-3xl border border-slate-300 bg-white p-6 shadow-xl">
+        <section id="result" class="report-light hidden mt-7 rounded-3xl border border-slate-200 bg-white p-6 shadow-xl md:p-8">
           <div class="verdict-main">
             <p class="text-sm uppercase tracking-[0.16em] text-slate-500">Deliverability Verdict</p>
             <h2 id="verdict-headline" class="mt-2 text-3xl font-bold text-slate-900">Analyzing...</h2>
@@ -119,8 +119,8 @@
             <span id="loading-step">Analyzing SPF...</span>
           </div>
 
-          <p class="mt-5 text-xl font-semibold text-slate-900">What hurts deliverability first</p>
-          <ul id="findings" class="mt-2 space-y-3">
+          <p class="mt-6 text-3xl font-bold text-slate-900">What hurts deliverability first</p>
+          <ul id="findings" class="mt-3 grid gap-3 md:grid-cols-2">
             <li class="finding-row medium">Your email has issues that can push it to spam. Fixes are locked.</li>
           </ul>
 
