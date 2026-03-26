@@ -66,19 +66,19 @@ function sendTrackEvent(eventName, target = "", mode = "") {
 
 const pillStyle = {
     "High Risk": {
-        cls: "border-red-500/60 bg-red-500/15 text-red-100",
+        cls: "border-red-300 bg-red-50 text-red-800",
         scoreCls: "text-red-500",
     },
     "Needs Review": {
-        cls: "border-amber-300 bg-amber-50 text-amber-700",
+        cls: "border-amber-300 bg-amber-50 text-amber-800",
         scoreCls: "text-yellow-400",
     },
     "Content Safe": {
-        cls: "border-emerald-300 bg-emerald-50 text-emerald-700",
+        cls: "border-emerald-300 bg-emerald-50 text-emerald-800",
         scoreCls: "text-emerald-400",
     },
     "High Spam-Risk Signals": {
-        cls: "border-rose-300 bg-rose-50 text-rose-700",
+        cls: "border-red-300 bg-red-50 text-red-800",
         scoreCls: "text-red-500",
     },
 };
@@ -192,7 +192,7 @@ function updateLeadLinks(domain) {
 
 function renderRisk(summary) {
     const label = summary.risk_band;
-    const variant = pillStyle[label] || pillStyle["❌ Likely Spam"];
+    const variant = pillStyle[label] || pillStyle["High Spam-Risk Signals"];
 
     scoreNode.textContent = `${summary.score}/100`;
 

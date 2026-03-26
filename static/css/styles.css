@@ -263,14 +263,6 @@ h3 {
 
 .report-light {
     color: #0f172a;
-    background: #f8fafc;
-    border-color: #d6dee8;
-}
-
-.report-card {
-    background: #ffffff;
-    border: 1px solid #dbe3ee;
-    box-shadow: 0 1px 0 rgba(15, 23, 42, 0.03);
 }
 
 .report-light #risk-band,
@@ -283,23 +275,6 @@ h3 {
     color: #1e293b !important;
 }
 
-.report-light #findings {
-    color: #0f172a;
-}
-
-.report-light #top-fixes-list,
-.report-light #provider-view-list,
-.report-light #score-breakdown,
-.report-light #score-summary-lines,
-.report-light #missing-factors-list {
-    color: #1e293b !important;
-}
-
-.report-light #confidence-note,
-.report-light #real-world-risk {
-    color: #475569 !important;
-}
-
 .report-light .finding-row {
     background: #f8fafc;
     border-color: #cbd5e1;
@@ -308,6 +283,16 @@ h3 {
 
 .report-light .finding-title {
     color: #0f172a;
+}
+
+.report-light .bg-slate-800\/80 {
+    background-color: #e2e8f0 !important;
+}
+
+.report-light #result-loading {
+    color: #1d4ed8 !important;
+    background: #eff6ff !important;
+    border-color: #93c5fd !important;
 }
 
 .locked-item {

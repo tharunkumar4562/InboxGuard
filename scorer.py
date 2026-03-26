@@ -18,6 +18,8 @@ CONTENT_PENALTIES = {
     "confidence_killers": 6,
     "automation_high": 10,
     "missing_list_unsubscribe": 12,
+    "broadcast_marketing": 12,
+    "generic_salutation": 6,
 }
 
 INFRA_PENALTIES = {
@@ -93,6 +95,8 @@ def score_risk(signals: Dict) -> Dict:
     exclamation_count = _to_int(signals.get("exclamation_count", 0))
     repetitive_structure = bool(signals.get("repetitive_structure", False))
     recipient_name_present = bool(signals.get("recipient_name_present", False))
+    marketing_marker_count = _to_int(signals.get("marketing_marker_count", 0))
+    generic_salutation = bool(signals.get("generic_salutation", False))
     confidence_killers = signals.get("confidence_killers") or []
     opener_type = str(signals.get("opener_type", ""))
     intent_type = str(signals.get("intent_type", ""))
@@ -268,13 +272,32 @@ def score_risk(signals: Dict) -> Dict:
         points = min(12, CONTENT_PENALTIES["confidence_killers"] + len(confidence_killers))
         add_breakdown("Low-trust language", points, "Uncertain or hedging language detected")
 
+    if marketing_marker_count >= 4:
+        points = min(24, CONTENT_PENALTIES["broadcast_marketing"] + (marketing_marker_count - 4) * 2)
+        add_breakdown("Broadcast marketing tone", points, f"Detected {marketing_marker_count} promotional/broadcast markers")
+        add_issue(
+            "broadcast_marketing_tone",
+            "Broadcast-style promotional tone",
+            points,
+            "Reduce feature-broadcast copy and anchor message to one recipient-specific outcome.",
+            "Feature-heavy broadcast phrasing is often treated as campaign mail.",
+            ["gmail", "outlook", "yahoo"],
+        )
+
+    if generic_salutation:
+        points = CONTENT_PENALTIES["generic_salutation"]
+        add_breakdown("Generic salutation", points, "Detected non-specific greeting (e.g., 'Hi there')")
+
     # Targeting/persona penalties.
     has_personalization = any(
         marker in (signals.get("email_type_reason", "").lower())
         for marker in ["noticed", "saw your", "about your", "personali"]
     )
 
-    if email_type in ("cold outreach", "marketing/newsletter") and not recipient_name_present and not has_personalization:
+    if (
+        email_type in ("cold outreach", "marketing/newsletter")
+        or (email_type == "informational/system" and marketing_marker_count >= 4)
+    ) and not recipient_name_present and not has_personalization:
         points = CONTENT_PENALTIES["missing_personalization"]
         add_breakdown("No personalization", points, "Missing recipient-specific naming/context signal")
         add_issue(

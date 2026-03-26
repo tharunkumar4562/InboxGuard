@@ -233,6 +233,31 @@ def _repetitive_structure(text: str) -> bool:
     return repeated >= 2
 
 
+def _count_marketing_markers(text: str) -> int:
+    content = (text or "").lower()
+    markers = [
+        "introduce",
+        "major upgrade",
+        "designed for",
+        "game-ready",
+        "production-ready",
+        "optimized",
+        "scalable",
+        "at scale",
+        "latest generation",
+        "excited to",
+        "delivers",
+        "real-time",
+        "pipelines",
+    ]
+    return sum(1 for marker in markers if marker in content)
+
+
+def _has_generic_salutation(text: str) -> bool:
+    content = (text or "").lower()
+    return any(token in content for token in ["hi there", "hello there", "dear user", "dear customer"])
+
+
 def _extract_subject_header_only(text: str) -> str:
     match = re.search(r"^\s*Subject:\s*(.+)$", text or "", flags=re.IGNORECASE | re.MULTILINE)
     return _normalize_text(match.group(1)) if match else ""
@@ -338,6 +363,8 @@ def analyze_email(
     exclamation_count = normalized_email.count("!")
     recipient_name_present = _recipient_name_present(normalized_email)
     repetitive_structure = _repetitive_structure(normalized_body)
+    marketing_marker_count = _count_marketing_markers(normalized_body)
+    generic_salutation = _has_generic_salutation(normalized_body)
 
     signals = {
         "analysis_mode": mode,
@@ -373,6 +400,8 @@ def analyze_email(
         "exclamation_count": exclamation_count,
         "recipient_name_present": recipient_name_present,
         "repetitive_structure": repetitive_structure,
+        "marketing_marker_count": marketing_marker_count,
+        "generic_salutation": generic_salutation,
         "opener_type": opener_profile["type"],
         "opener_reason": opener_profile["reason"],
         "intent_type": intent_profile["type"],
