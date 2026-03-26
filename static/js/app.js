@@ -10,9 +10,10 @@ const loadingStep = document.getElementById("loading-step");
 const verdictHeadlineNode = document.getElementById("verdict-headline");
 const verdictSublineNode = document.getElementById("verdict-subline");
 const verdictWarningNode = document.getElementById("verdict-warning");
+const modeWarningNode = document.getElementById("mode-warning");
 const findingsNode = document.getElementById("findings");
 const topFixesListNode = document.getElementById("top-fixes-list");
-const whyMattersListNode = document.getElementById("why-matters-list");
+const consequenceListNode = document.getElementById("consequence-list");
 const verdictLabelNode = document.getElementById("verdict-label");
 const realWorldRiskNode = document.getElementById("real-world-risk");
 const missingFactorsListNode = document.getElementById("missing-factors-list");
@@ -147,6 +148,16 @@ function renderVerdict(summary) {
     verdictHeadlineNode.textContent = headlineMap[label] || "Deliverability risk detected";
     verdictSublineNode.textContent = sublineMap[label] || "This draft contains deliverability risks that should be fixed first.";
     verdictWarningNode.textContent = "Sending this email as-is may hurt your domain reputation.";
+
+    const modeLabel = (summary.analysis_mode_label || "").toLowerCase();
+    if (modeWarningNode) {
+        if (modeLabel.includes("content")) {
+            modeWarningNode.classList.remove("hidden");
+            modeWarningNode.textContent = "Domain checks are not included in Content only mode. Results may be incomplete.";
+        } else {
+            modeWarningNode.classList.add("hidden");
+        }
+    }
 }
 
 function renderFindings(findings) {
@@ -161,18 +172,33 @@ function renderFindings(findings) {
         return;
     }
 
-    findings.slice(0, 4).forEach((item) => {
-        const severity = item.severity || "medium";
-        const impactText = severity === "high" ? "High Impact" : severity === "low" ? "Low Impact" : "Medium Impact";
+    const filtered = findings.filter((item) => !String(item.title || "").toLowerCase().startsWith("analysis mode"));
+
+    filtered.slice(0, 3).forEach((item, index) => {
+        let severity = item.severity || "medium";
         const title = item.title || "Risk signal";
+        const loweredTitle = title.toLowerCase();
+        if (loweredTitle.includes("broadcast") || loweredTitle.includes("personalization")) {
+            severity = "high";
+        }
+
         const note = item.issue || item.impact || item.message || "This pattern can reduce inbox trust.";
+        const consequence =
+            severity === "high"
+                ? "If sent unchanged, this can push your email into bulk or spam filtering."
+                : "If ignored, this can reduce inbox placement over time.";
+        const impactLabel = severity === "high" ? "High Impact" : severity === "low" ? "Low Impact" : "Medium Impact";
 
         const li = document.createElement("li");
         li.className = `card finding-row ${severity}`;
+        if (index === 0) {
+            li.classList.add("primary-risk");
+        }
         li.innerHTML = `
             <p class="finding-title">${title}</p>
-            <p class="finding-impact ${severity}">${impactText}</p>
+            <p class="finding-impact ${severity}">${impactLabel}</p>
             <p class="finding-note">${note}</p>
+            <p class="finding-note">${consequence}</p>
         `;
         findingsNode.appendChild(li);
     });
@@ -191,9 +217,23 @@ function renderTopFixes(summary) {
         return;
     }
 
+    const commandFromFix = (title, action) => {
+        const rawTitle = String(title || "").toLowerCase();
+        if (rawTitle.includes("broadcast")) {
+            return "Remove feature list and rewrite this as a one-to-one message focused on one recipient outcome.";
+        }
+        if (rawTitle.includes("personalization")) {
+            return "Rewrite your first line to include one recipient-specific detail relevant to their context.";
+        }
+        if (rawTitle.includes("dkim") || rawTitle.includes("spf") || rawTitle.includes("dmarc")) {
+            return "Fix authentication records before sending this campaign to protect domain trust.";
+        }
+        return action || "Fix this issue before sending.";
+    };
+
     fixes.slice(0, 3).forEach((fix, index) => {
         const title = fix.title || fix.type || "Fix issue";
-        const action = fix.action || "Resolve this signal before sending.";
+        const action = commandFromFix(title, fix.action);
         const li = document.createElement("li");
         li.className = "card";
         li.innerHTML = `<strong>${index + 1}. ${title}</strong><p>${action}</p>`;
@@ -201,27 +241,23 @@ function renderTopFixes(summary) {
     });
 }
 
-function renderWhyMatters(summary) {
-    if (!whyMattersListNode) {
+function renderConsequences(summary) {
+    if (!consequenceListNode) {
         return;
     }
 
-    const findings = summary.findings || [];
-    whyMattersListNode.innerHTML = "";
+    consequenceListNode.innerHTML = "";
+    const lines = [
+        "Likely filtered as bulk or spam by mailbox providers.",
+        "Lower inbox placement over time as trust signals degrade.",
+        "Domain reputation damage that makes future campaigns harder to deliver.",
+    ];
 
-    const lines = [];
-    if (findings.length) {
-        lines.push("Broadcast-style and template signals increase bulk filtering probability.");
-        lines.push("Low personalization can reduce trust scores in mailbox filtering systems.");
-    }
-    lines.push("Authentication or alignment gaps reduce sender trust with providers.");
-    lines.push("Ignoring repeated risk patterns can damage domain reputation over time.");
-
-    lines.slice(0, 3).forEach((line) => {
+    lines.forEach((line) => {
         const li = document.createElement("li");
         li.className = "card";
         li.textContent = line;
-        whyMattersListNode.appendChild(li);
+        consequenceListNode.appendChild(li);
     });
 }
 
@@ -230,13 +266,13 @@ function renderRealityGap(summary) {
         return;
     }
 
-    verdictLabelNode.textContent = summary.verdict_label || "Content and technical diagnostic only";
-    realWorldRiskNode.textContent = summary.real_world_risk || "Real inbox placement remains uncertain without sender reputation and engagement history.";
+    verdictLabelNode.textContent = "These critical factors are not included:";
+    realWorldRiskNode.textContent = "Results can still shift due to sender reputation and engagement history.";
 
     const missing = summary.missing_factors || [];
     missingFactorsListNode.innerHTML = "";
     if (!missing.length) {
-        missingFactorsListNode.innerHTML = "<li>Sender reputation history</li><li>Engagement history</li><li>Complaint rates</li>";
+        missingFactorsListNode.innerHTML = "<li>Sender reputation history</li><li>Spam complaint and report rates</li><li>Recipient engagement history</li>";
         return;
     }
 
@@ -340,7 +376,7 @@ if (form) {
             renderVerdict(summary);
             renderFindings(data.partial_findings || summary.findings || []);
             renderTopFixes(summary);
-            renderWhyMatters(summary);
+            renderConsequences(summary);
             renderRealityGap(summary);
             renderProviderView(summary);
             renderBreakdown(summary);

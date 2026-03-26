@@ -30,7 +30,7 @@
           <div class="hero-copy">
             <h1>Before You Send That Email</h1>
             <p class="lead">Check if it will damage your domain reputation.</p>
-            <p class="sublead">Most cold emails do not fail because of content. They fail because of hidden deliverability signals.</p>
+            <p class="sublead">Most emails fail due to hidden deliverability signals.</p>
           </div>
 
           <form id="risk-form" class="input-shell">
@@ -62,43 +62,6 @@
         </div>
       </section>
 
-      <section class="landing">
-        <div class="container">
-          <div class="section">
-            <h2>Why your emails fail (and you do not even know)</h2>
-            <ul>
-              <li>Your email looks fine but still goes to spam.</li>
-              <li>Generic checkers return safe scores without real failure signals.</li>
-              <li>Most teams discover deliverability issues after domain damage happens.</li>
-            </ul>
-          </div>
-
-          <div class="section">
-            <h2>This is not an email checker</h2>
-            <p>InboxGuard is a pre-send safety system. It shows what can break deliverability before you send.</p>
-          </div>
-
-          <div class="section">
-            <h2>How it works</h2>
-            <ol>
-              <li>Paste your email.</li>
-              <li>We analyze content and technical risk signals.</li>
-              <li>You see what can hurt inbox placement first.</li>
-              <li>Fix before sending to protect your domain.</li>
-            </ol>
-          </div>
-
-          <div class="section consequence">
-            <h2>What happens if you ignore this</h2>
-            <ul>
-              <li>Lower inbox placement.</li>
-              <li>Domain reputation damage.</li>
-              <li>Campaign performance collapse without clear diagnosis.</li>
-            </ul>
-          </div>
-        </div>
-      </section>
-
       <section id="result" class="report hidden">
         <div class="container">
           <div class="verdict" id="verdict-block">
@@ -106,10 +69,11 @@
             <h2 id="verdict-headline">Run a check to see your risk</h2>
             <p id="verdict-subline">We will identify the strongest signals that can hurt this email.</p>
             <p id="verdict-warning" class="warning-line">Sending this email as-is may hurt your domain reputation.</p>
+            <p id="mode-warning" class="mode-warning hidden">Domain checks are not included in Content only mode. Results may be incomplete.</p>
           </div>
 
           <div class="section">
-            <h3>Biggest risk right now</h3>
+            <h3>THIS IS WHY YOUR EMAIL FAILS</h3>
             <ul id="findings" class="card-grid">
               <li class="card finding-row medium">Risk findings will appear here after analysis.</li>
             </ul>
@@ -123,43 +87,44 @@
           </div>
 
           <div class="section">
-            <h3>Why this matters</h3>
-            <ul id="why-matters-list" class="card-list">
-              <li class="card">Deliverability rationale will appear here.</li>
+            <h3>IF YOU SEND THIS EMAIL</h3>
+            <ul id="consequence-list" class="card-list">
+              <li class="card">Likely filtered as bulk or spam.</li>
             </ul>
           </div>
 
           <div class="section">
             <div id="real-risk-wrap" class="card card-warning">
-              <h3>Missing critical signals</h3>
+              <h3>Not included in this check</h3>
               <p id="verdict-label">-</p>
               <p id="real-world-risk">-</p>
-              <p>This analysis does not include sender reputation history, engagement history, or complaint rates.</p>
+              <p>This analysis does not include these mailbox-provider signals:</p>
               <ul id="missing-factors-list">
                 <li>Missing factors will appear here.</li>
               </ul>
             </div>
           </div>
 
-          <div class="section">
-            <h3>Provider view</h3>
-            <ul id="provider-view-list" class="card-list">
-              <li class="card">Provider-specific view will appear here.</li>
-            </ul>
-          </div>
-
-          <div class="section">
-            <h3>Score breakdown</h3>
-            <div id="score-breakdown-wrap" class="card">
-              <ul id="score-breakdown" class="compact-list"></ul>
+          <details class="section advanced-block">
+            <summary>Advanced view (provider + score math)</summary>
+            <div class="advanced-content">
+              <h3>Provider view</h3>
+              <ul id="provider-view-list" class="card-list">
+                <li class="card">Provider-specific view will appear here.</li>
+              </ul>
+              <h3>Score breakdown</h3>
+              <div id="score-breakdown-wrap" class="card">
+                <ul id="score-breakdown" class="compact-list"></ul>
+              </div>
             </div>
-          </div>
+          </details>
 
           <div id="result-cta" class="section">
             <div class="card cta-card">
-              <h3>Improve your email performance</h3>
-              <p>Get exact fixes tailored to this email.</p>
-              <a id="unlock-link" href="https://wa.me/?text=I%20want%20to%20unlock%20the%20full%20report%20for%20yourdomain.com" target="_blank" rel="noopener noreferrer" class="btn-primary">Get Full Fix Report</a>
+              <p class="workflow-step">Step 1 of your sending workflow</p>
+              <h3>Fix this email before it damages your domain</h3>
+              <p>Get the full fix plan before sending.</p>
+              <a id="unlock-link" href="https://wa.me/?text=I%20want%20to%20unlock%20the%20full%20report%20for%20yourdomain.com" target="_blank" rel="noopener noreferrer" class="btn-primary">Get Full Fix Plan Before Sending</a>
               <div class="email-row">
                 <input id="lead-email" type="email" placeholder="you@company.com" />
                 <a id="email-request-link" href="mailto:inboxguard.beta@gmail.com?subject=InboxGuard%20Full%20Fix%20Report%20Request&body=Domain:%20yourdomain.com%0AEmail:%20you@company.com" class="btn-secondary">Send Report Request</a>
