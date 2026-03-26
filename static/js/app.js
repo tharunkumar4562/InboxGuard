@@ -7,33 +7,39 @@ const submitButton = document.getElementById("run-check");
 const resultLoading = document.getElementById("result-loading");
 const loadingStep = document.getElementById("loading-step");
 
-const verdictHeadlineNode = document.getElementById("verdict-headline");
-const verdictSublineNode = document.getElementById("verdict-subline");
-const verdictWarningNode = document.getElementById("verdict-warning");
-const modeWarningNode = document.getElementById("mode-warning");
-const findingsNode = document.getElementById("findings");
+const statusRiskBandNode = document.getElementById("status-risk-band");
+const statusRiskScoreNode = document.getElementById("status-risk-score");
+const statusPrimaryIssueNode = document.getElementById("status-primary-issue");
+const statusInfraNode = document.getElementById("status-infra");
+
+const biggestRiskCard = document.getElementById("biggest-risk-card");
+const biggestRiskTitleNode = document.getElementById("biggest-risk-title");
+const biggestRiskImpactNode = document.getElementById("biggest-risk-impact");
+const biggestRiskDescNode = document.getElementById("biggest-risk-desc");
+
+const hurtListNode = document.getElementById("hurt-list");
 const topFixesListNode = document.getElementById("top-fixes-list");
-const consequenceListNode = document.getElementById("consequence-list");
-const verdictLabelNode = document.getElementById("verdict-label");
-const realWorldRiskNode = document.getElementById("real-world-risk");
-const missingFactorsListNode = document.getElementById("missing-factors-list");
 const providerViewListNode = document.getElementById("provider-view-list");
-const scoreBreakdownWrap = document.getElementById("score-breakdown-wrap");
 const scoreBreakdownNode = document.getElementById("score-breakdown");
 
-const resultCta = document.getElementById("result-cta");
+const fixNowButton = document.getElementById("fix-now");
+const rewriteActionButton = document.getElementById("rewrite-action");
+const personalizeActionButton = document.getElementById("personalize-action");
+const domainActionButton = document.getElementById("domain-action");
+
 const unlockLink = document.getElementById("unlock-link");
 const leadEmailInput = document.getElementById("lead-email");
 const emailRequestLink = document.getElementById("email-request-link");
 
 const loadingMessages = [
-    "Scanning high-risk language...",
-    "Checking authentication posture...",
-    "Prioritizing fixes before send...",
+    "Collecting risk telemetry...",
+    "Scoring content threats...",
+    "Prioritizing remediation actions...",
 ];
 
-const defaultSubmitLabel = submitButton ? submitButton.textContent : "Check Before You Burn Your Domain";
+const defaultSubmitLabel = submitButton ? submitButton.textContent : "Detect Spam Triggers Before Sending";
 let loadingTimer = null;
+let lastSummary = null;
 
 const errorBanner = document.createElement("div");
 errorBanner.id = "error-banner";
@@ -55,7 +61,7 @@ function sendTrackEvent(eventName, target = "", mode = "") {
         body: payload,
         keepalive: true,
     }).catch(() => {
-        // Analytics must never break user flow.
+        // Never block UX on analytics failures.
     });
 }
 
@@ -64,7 +70,7 @@ function showError(message) {
     errorBanner.classList.remove("hidden");
     setTimeout(() => {
         errorBanner.classList.add("hidden");
-    }, 4200);
+    }, 4000);
 }
 
 function sleep(ms) {
@@ -81,7 +87,7 @@ function startLoadingSteps() {
     loadingTimer = setInterval(() => {
         idx = (idx + 1) % loadingMessages.length;
         loadingStep.textContent = loadingMessages[idx];
-    }, 650);
+    }, 620);
 }
 
 function stopLoadingSteps() {
@@ -92,19 +98,19 @@ function stopLoadingSteps() {
 }
 
 function setLoadingState(isLoading) {
-    if (!resultLoading || !submitButton) {
+    if (!submitButton || !resultLoading) {
         return;
     }
 
     if (isLoading) {
-        resultLoading.classList.remove("hidden");
         submitButton.disabled = true;
-        submitButton.textContent = "Analyzing...";
+        submitButton.textContent = "Scanning...";
+        resultLoading.classList.remove("hidden");
         startLoadingSteps();
     } else {
-        resultLoading.classList.add("hidden");
         submitButton.disabled = false;
         submitButton.textContent = defaultSubmitLabel;
+        resultLoading.classList.add("hidden");
         stopLoadingSteps();
     }
 }
@@ -124,87 +130,138 @@ function updateLeadLinks(domain) {
     emailRequestLink.href = `mailto:inboxguard.beta@gmail.com?subject=${subject}&body=${body}`;
 }
 
-function renderVerdict(summary) {
-    if (!verdictHeadlineNode || !verdictSublineNode || !verdictWarningNode) {
+function getPrimaryIssue(summary, findings) {
+    const topFixes = summary.top_fixes || [];
+    if (topFixes.length && topFixes[0].title) {
+        return topFixes[0].title;
+    }
+
+    const filtered = (findings || []).filter((item) => !String(item.title || "").toLowerCase().startsWith("analysis mode"));
+    if (filtered.length && filtered[0].title) {
+        return filtered[0].title;
+    }
+
+    return "No critical issue";
+}
+
+function renderStatusOverview(summary, signals, findings) {
+    if (!statusRiskBandNode || !statusRiskScoreNode || !statusPrimaryIssueNode || !statusInfraNode) {
         return;
     }
 
-    const label = summary.risk_band || "Needs Review";
+    const band = summary.risk_band || "Needs Review";
+    let label = "Warning";
+    let className = "warning";
 
-    const headlineMap = {
-        "Content Safe": "Content Looks Safe - Delivery Risk Can Still Exist",
-        "Needs Review": "Moderate Risk - Review Before Sending",
-        "High Spam-Risk Signals": "High Risk - Likely Spam",
-        "High Risk": "High Risk - Likely Spam",
-    };
+    if (band === "High Spam-Risk Signals" || band === "High Risk") {
+        label = "Critical";
+        className = "critical";
+    } else if (band === "Content Safe") {
+        label = "Safe";
+        className = "safe";
+    }
 
-    const sublineMap = {
-        "Content Safe": "No major direct spam triggers found in this draft.",
-        "Needs Review": "This draft has risk patterns that can hurt inbox placement.",
-        "High Spam-Risk Signals": "Strong risk patterns detected that can trigger bulk or spam filtering.",
-        "High Risk": "Strong risk patterns detected that can trigger bulk or spam filtering.",
-    };
+    statusRiskBandNode.textContent = label;
+    statusRiskBandNode.className = `status-value ${className}`;
 
-    verdictHeadlineNode.textContent = headlineMap[label] || "Deliverability risk detected";
-    verdictSublineNode.textContent = sublineMap[label] || "This draft contains deliverability risks that should be fixed first.";
-    verdictWarningNode.textContent = "Sending this email as-is may hurt your domain reputation.";
+    statusRiskScoreNode.textContent = `${summary.score || 0}/100`;
+    statusPrimaryIssueNode.textContent = getPrimaryIssue(summary, findings);
 
-    const modeLabel = (summary.analysis_mode_label || "").toLowerCase();
-    if (modeWarningNode) {
-        if (modeLabel.includes("content")) {
-            modeWarningNode.classList.remove("hidden");
-            modeWarningNode.textContent = "Domain checks are not included in Content only mode. Results may be incomplete.";
-        } else {
-            modeWarningNode.classList.add("hidden");
-        }
+    const mode = String(summary.analysis_mode || "content");
+    if (mode === "content") {
+        statusInfraNode.textContent = "Not Checked";
+        return;
+    }
+
+    const spf = String(signals.spf_status || "unknown");
+    const dkim = String(signals.dkim_status || "unknown");
+    const dmarc = String(signals.dmarc_status || "unknown");
+    const allGood = spf === "found" && dkim === "found" && dmarc === "found";
+    statusInfraNode.textContent = allGood ? "Healthy" : "Needs Attention";
+}
+
+function setImpactBadge(node, impact) {
+    if (!node) {
+        return;
+    }
+
+    node.className = "badge";
+    if (impact === "HIGH") {
+        node.classList.add("badge-red");
+    } else if (impact === "MEDIUM") {
+        node.classList.add("badge-yellow");
+    } else {
+        node.classList.add("badge-green");
+    }
+    node.textContent = impact;
+}
+
+function renderBiggestRisk(summary, findings) {
+    if (!biggestRiskTitleNode || !biggestRiskImpactNode || !biggestRiskDescNode || !biggestRiskCard) {
+        return;
+    }
+
+    const filtered = (findings || []).filter((item) => !String(item.title || "").toLowerCase().startsWith("analysis mode"));
+    const primary = filtered[0] || null;
+
+    if (!primary) {
+        biggestRiskTitleNode.textContent = "No critical risk detected";
+        biggestRiskDescNode.textContent = "Continue monitoring before send.";
+        setImpactBadge(biggestRiskImpactNode, "LOW");
+        biggestRiskCard.classList.remove("card-critical");
+        return;
+    }
+
+    biggestRiskTitleNode.textContent = primary.title || "Risk signal detected";
+    biggestRiskDescNode.textContent = (primary.issue || primary.impact || "Likely to reduce inbox placement.").split(".")[0] + ".";
+
+    const severity = String(primary.severity || "medium").toLowerCase();
+    const impact = severity === "high" ? "HIGH" : severity === "low" ? "LOW" : "MEDIUM";
+    setImpactBadge(biggestRiskImpactNode, impact);
+
+    if (impact === "HIGH") {
+        biggestRiskCard.classList.add("card-critical");
+    } else {
+        biggestRiskCard.classList.remove("card-critical");
     }
 }
 
-function renderFindings(findings) {
-    if (!findingsNode) {
+function renderHurtingList(findings) {
+    if (!hurtListNode) {
         return;
     }
 
-    findingsNode.innerHTML = "";
+    hurtListNode.innerHTML = "";
+    const filtered = (findings || []).filter((item) => !String(item.title || "").toLowerCase().startsWith("analysis mode"));
 
-    if (!findings || !findings.length) {
-        findingsNode.innerHTML = "<li class=\"card finding-row low\"><p class=\"finding-title\">No critical risks detected</p><p class=\"finding-impact low\">Low Impact</p><p class=\"finding-note\">No major red flags were found in this draft.</p></li>";
+    if (!filtered.length) {
+        hurtListNode.innerHTML = "<li>No high-priority deliverability threats detected.</li>";
         return;
     }
 
-    const filtered = findings.filter((item) => !String(item.title || "").toLowerCase().startsWith("analysis mode"));
-
-    filtered.slice(0, 3).forEach((item, index) => {
-        let severity = item.severity || "medium";
-        const title = item.title || "Risk signal";
-        const loweredTitle = title.toLowerCase();
-        if (loweredTitle.includes("broadcast") || loweredTitle.includes("personalization")) {
-            severity = "high";
-        }
-
-        const note = item.issue || item.impact || item.message || "This pattern can reduce inbox trust.";
-        const consequence =
-            severity === "high"
-                ? "If sent unchanged, this can push your email into bulk or spam filtering."
-                : "If ignored, this can reduce inbox placement over time.";
-        const impactLabel = severity === "high" ? "High Impact" : severity === "low" ? "Low Impact" : "Medium Impact";
-
+    filtered.slice(0, 3).forEach((item) => {
         const li = document.createElement("li");
-        li.className = `card finding-row ${severity}`;
-        if (index === 0) {
-            li.classList.add("primary-risk");
-        }
-        li.innerHTML = `
-            <p class="finding-title">${title}</p>
-            <p class="finding-impact ${severity}">${impactLabel}</p>
-            <p class="finding-note">${note}</p>
-            <p class="finding-note">${consequence}</p>
-        `;
-        findingsNode.appendChild(li);
+        const sev = String(item.severity || "medium").toUpperCase();
+        li.textContent = `${item.title || "Risk"} (${sev})`;
+        hurtListNode.appendChild(li);
     });
 }
 
-function renderTopFixes(summary) {
+function toCommandAction(title, fallback) {
+    const text = String(title || "").toLowerCase();
+    if (text.includes("broadcast")) {
+        return "Remove feature list and rewrite as a 1-to-1 message.";
+    }
+    if (text.includes("personalization")) {
+        return "Add recipient-specific detail in the opening line.";
+    }
+    if (text.includes("dkim") || text.includes("spf") || text.includes("dmarc")) {
+        return "Fix authentication setup before sending campaign traffic.";
+    }
+    return fallback || "Resolve this issue before sending.";
+}
+
+function renderFixes(summary) {
     if (!topFixesListNode) {
         return;
     }
@@ -213,73 +270,16 @@ function renderTopFixes(summary) {
     const fixes = summary.top_fixes || [];
 
     if (!fixes.length) {
-        topFixesListNode.innerHTML = "<li class=\"card\">No urgent action is required for this draft right now.</li>";
+        topFixesListNode.innerHTML = "<li>No immediate fix required.</li>";
         return;
     }
 
-    const commandFromFix = (title, action) => {
-        const rawTitle = String(title || "").toLowerCase();
-        if (rawTitle.includes("broadcast")) {
-            return "Remove feature list and rewrite this as a one-to-one message focused on one recipient outcome.";
-        }
-        if (rawTitle.includes("personalization")) {
-            return "Rewrite your first line to include one recipient-specific detail relevant to their context.";
-        }
-        if (rawTitle.includes("dkim") || rawTitle.includes("spf") || rawTitle.includes("dmarc")) {
-            return "Fix authentication records before sending this campaign to protect domain trust.";
-        }
-        return action || "Fix this issue before sending.";
-    };
-
-    fixes.slice(0, 3).forEach((fix, index) => {
-        const title = fix.title || fix.type || "Fix issue";
-        const action = commandFromFix(title, fix.action);
+    fixes.slice(0, 3).forEach((item, idx) => {
         const li = document.createElement("li");
-        li.className = "card";
-        li.innerHTML = `<strong>${index + 1}. ${title}</strong><p>${action}</p>`;
+        const title = item.title || item.type || "Fix issue";
+        const action = toCommandAction(title, item.action);
+        li.textContent = `${idx + 1}. ${action}`;
         topFixesListNode.appendChild(li);
-    });
-}
-
-function renderConsequences(summary) {
-    if (!consequenceListNode) {
-        return;
-    }
-
-    consequenceListNode.innerHTML = "";
-    const lines = [
-        "Likely filtered as bulk or spam by mailbox providers.",
-        "Lower inbox placement over time as trust signals degrade.",
-        "Domain reputation damage that makes future campaigns harder to deliver.",
-    ];
-
-    lines.forEach((line) => {
-        const li = document.createElement("li");
-        li.className = "card";
-        li.textContent = line;
-        consequenceListNode.appendChild(li);
-    });
-}
-
-function renderRealityGap(summary) {
-    if (!verdictLabelNode || !realWorldRiskNode || !missingFactorsListNode) {
-        return;
-    }
-
-    verdictLabelNode.textContent = "These critical factors are not included:";
-    realWorldRiskNode.textContent = "Results can still shift due to sender reputation and engagement history.";
-
-    const missing = summary.missing_factors || [];
-    missingFactorsListNode.innerHTML = "";
-    if (!missing.length) {
-        missingFactorsListNode.innerHTML = "<li>Sender reputation history</li><li>Spam complaint and report rates</li><li>Recipient engagement history</li>";
-        return;
-    }
-
-    missing.forEach((factor) => {
-        const li = document.createElement("li");
-        li.textContent = factor;
-        missingFactorsListNode.appendChild(li);
     });
 }
 
@@ -290,50 +290,130 @@ function renderProviderView(summary) {
 
     providerViewListNode.innerHTML = "";
     const providerResults = summary.provider_results || {};
-
     const statusMap = {
-        content_safe: "Content Safe",
-        needs_review: "Needs Review",
-        high_risk_signals: "High Risk",
+        content_safe: "Safe",
+        needs_review: "Warning",
+        high_risk_signals: "Critical",
     };
 
     ["gmail", "outlook", "yahoo"].forEach((provider) => {
         const item = providerResults[provider];
-        if (!item) {
-            return;
-        }
-        const li = document.createElement("li");
-        li.className = "card";
         const providerName = provider.charAt(0).toUpperCase() + provider.slice(1);
-        const status = statusMap[item.status] || item.status || "Needs Review";
-        li.textContent = `${providerName}: ${status} (top issue: ${item.top_issue || "risk signals detected"})`;
+        const li = document.createElement("li");
+
+        if (!item) {
+            li.textContent = `${providerName}: No data`;
+        } else {
+            const status = statusMap[item.status] || "Warning";
+            li.textContent = `${providerName}: ${status} | Top issue: ${item.top_issue || "Risk signals"}`;
+        }
+
         providerViewListNode.appendChild(li);
     });
-
-    if (!providerViewListNode.children.length) {
-        providerViewListNode.innerHTML = "<li class=\"card\">Provider-specific view is unavailable for this input.</li>";
-    }
 }
 
-function renderBreakdown(summary) {
-    if (!scoreBreakdownWrap || !scoreBreakdownNode) {
-        return;
-    }
-
-    const breakdown = summary.breakdown || [];
-    if (!breakdown.length) {
-        scoreBreakdownWrap.classList.add("hidden");
-        scoreBreakdownNode.innerHTML = "";
+function renderScoreBreakdown(summary) {
+    if (!scoreBreakdownNode) {
         return;
     }
 
     scoreBreakdownNode.innerHTML = "";
-    breakdown.slice(0, 6).forEach((item) => {
+    const penalties = (summary.breakdown || []).filter((item) => Number(item.points) < 0);
+
+    if (!penalties.length) {
+        scoreBreakdownNode.innerHTML = "<li>No active penalties.</li>";
+        return;
+    }
+
+    penalties.slice(0, 5).forEach((item) => {
         const li = document.createElement("li");
-        li.textContent = `${item.label}: ${item.points}`;
+        li.textContent = `${item.label} ${item.points}`;
         scoreBreakdownNode.appendChild(li);
     });
-    scoreBreakdownWrap.classList.remove("hidden");
+}
+
+function runActionRewrite() {
+    if (!rawEmailInput) {
+        return;
+    }
+
+    const text = rawEmailInput.value.trim();
+    if (!text) {
+        rawEmailInput.value = "Hi {{FirstName}},\n\nI noticed [specific detail about recipient].\n\nOne clear outcome this can help with is [single outcome].\n\nWould it make sense to share a short 2-line plan?";
+        return;
+    }
+
+    rawEmailInput.value = `${text}\n\n[Rewrite hint] Convert this draft into one recipient-focused message with one clear outcome.`;
+}
+
+function runActionPersonalize() {
+    if (!rawEmailInput) {
+        return;
+    }
+
+    const text = rawEmailInput.value.trim();
+    if (!text) {
+        rawEmailInput.value = "Hi {{FirstName}},\n\nI saw your recent update on [specific topic].";
+        return;
+    }
+
+    rawEmailInput.value = `Hi {{FirstName}},\nI noticed [recipient-specific detail].\n\n${text}`;
+}
+
+function runActionDomainHealth() {
+    if (!analysisModeInput) {
+        return;
+    }
+
+    analysisModeInput.value = "full";
+    sendTrackEvent("action_click", "check_domain_health", "full");
+}
+
+if (fixNowButton) {
+    fixNowButton.addEventListener("click", () => {
+        if (topFixesListNode) {
+            topFixesListNode.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+        sendTrackEvent("action_click", "fix_email_now", analysisModeInput ? analysisModeInput.value : "");
+    });
+}
+
+if (rewriteActionButton) {
+    rewriteActionButton.addEventListener("click", () => {
+        runActionRewrite();
+        sendTrackEvent("action_click", "rewrite_for_deliverability", analysisModeInput ? analysisModeInput.value : "");
+    });
+}
+
+if (personalizeActionButton) {
+    personalizeActionButton.addEventListener("click", () => {
+        runActionPersonalize();
+        sendTrackEvent("action_click", "add_personalization", analysisModeInput ? analysisModeInput.value : "");
+    });
+}
+
+if (domainActionButton) {
+    domainActionButton.addEventListener("click", runActionDomainHealth);
+}
+
+if (unlockLink) {
+    unlockLink.addEventListener("click", () => {
+        sendTrackEvent("cta_click", "fix_email_now", analysisModeInput ? analysisModeInput.value : "");
+    });
+}
+
+if (emailRequestLink) {
+    emailRequestLink.addEventListener("click", () => {
+        sendTrackEvent("cta_click", "email_request", analysisModeInput ? analysisModeInput.value : "");
+    });
+}
+
+if (leadEmailInput) {
+    leadEmailInput.addEventListener("input", () => updateLeadLinks(domainInput ? domainInput.value : ""));
+}
+
+if (domainInput) {
+    domainInput.addEventListener("input", () => updateLeadLinks(domainInput.value));
 }
 
 if (form) {
@@ -342,6 +422,7 @@ if (form) {
 
         const rawText = rawEmailInput ? rawEmailInput.value.trim() : "";
         const domainText = domainInput ? domainInput.value.trim() : "";
+        const mode = analysisModeInput ? analysisModeInput.value : "content";
 
         if (rawText.length < 20) {
             showError("Paste the full email draft before scanning.");
@@ -356,72 +437,47 @@ if (form) {
             if (domainText) {
                 payload.set("domain", domainText);
             }
-            payload.set("analysis_mode", analysisModeInput ? analysisModeInput.value : "content");
+            payload.set("analysis_mode", mode);
 
             const [response] = await Promise.all([
                 fetch("/analyze", {
                     method: "POST",
                     body: payload,
                 }),
-                sleep(1200),
+                sleep(900),
             ]);
 
             if (!response.ok) {
-                throw new Error("Unable to run risk check. Please try again.");
+                throw new Error("Unable to complete risk scan. Try again.");
             }
 
             const data = await response.json();
             const summary = data.summary || {};
+            const signals = data.signals || {};
+            const findings = data.partial_findings || summary.findings || [];
 
-            renderVerdict(summary);
-            renderFindings(data.partial_findings || summary.findings || []);
-            renderTopFixes(summary);
-            renderConsequences(summary);
-            renderRealityGap(summary);
+            lastSummary = summary;
+            renderStatusOverview(summary, signals, findings);
+            renderBiggestRisk(summary, findings);
+            renderHurtingList(findings);
+            renderFixes(summary);
             renderProviderView(summary);
-            renderBreakdown(summary);
+            renderScoreBreakdown(summary);
 
             updateLeadLinks(data.domain || domainText);
 
-            if (resultCta) {
-                resultCta.classList.remove("hidden");
-            }
             if (resultSection) {
                 resultSection.classList.remove("hidden");
                 resultSection.scrollIntoView({ behavior: "smooth", block: "start" });
             }
 
-            sendTrackEvent("analyze", "submit", analysisModeInput ? analysisModeInput.value : "content");
+            sendTrackEvent("analyze", "submit", mode);
         } catch (error) {
             const message = error && error.message ? error.message : "Scan failed.";
             showError(message);
         } finally {
             setLoadingState(false);
         }
-    });
-}
-
-if (unlockLink) {
-    unlockLink.addEventListener("click", () => {
-        sendTrackEvent("cta_click", "whatsapp_unlock", analysisModeInput ? analysisModeInput.value : "");
-    });
-}
-
-if (emailRequestLink) {
-    emailRequestLink.addEventListener("click", () => {
-        sendTrackEvent("cta_click", "email_request_link", analysisModeInput ? analysisModeInput.value : "");
-    });
-}
-
-if (leadEmailInput) {
-    leadEmailInput.addEventListener("input", () => {
-        updateLeadLinks(domainInput ? domainInput.value : "");
-    });
-}
-
-if (domainInput) {
-    domainInput.addEventListener("input", () => {
-        updateLeadLinks(domainInput.value);
     });
 }
 
