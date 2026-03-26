@@ -400,16 +400,31 @@ function renderBreakdown(summary) {
     }
 
     scoreBreakdownNode.innerHTML = "";
+    const model = summary.scoring_model || {};
     const penalties = (summary.breakdown || []).filter((item) => Number(item.points) < 0);
 
+    const baseline = Number(model.baseline_score || 0);
+    const totalPenalty = Number(model.total_penalty_points || summary.risk_points || 0);
+    const finalScore = Number(model.final_score || summary.final_score || summary.score || 0);
+
+    if (baseline > 0) {
+        const formulaLine = document.createElement("li");
+        formulaLine.textContent = `Model: ${baseline} baseline - ${totalPenalty} penalties = ${finalScore} final score`;
+        scoreBreakdownNode.appendChild(formulaLine);
+    }
+
     if (!penalties.length) {
-        scoreBreakdownNode.innerHTML = "<li>No penalty data yet.</li>";
+        const noPenalty = document.createElement("li");
+        noPenalty.textContent = "No penalties triggered from current detected signals.";
+        scoreBreakdownNode.appendChild(noPenalty);
         return;
     }
 
     penalties.slice(0, 5).forEach((item) => {
         const li = document.createElement("li");
-        li.textContent = `${item.label} ${item.points}`;
+        const points = Math.abs(Number(item.points || 0));
+        const reason = item.reason ? ` | ${item.reason}` : "";
+        li.textContent = `-${points} ${item.label}${reason}`;
         scoreBreakdownNode.appendChild(li);
     });
 }
@@ -444,7 +459,7 @@ async function estimateImprovement(originalScore, rewrittenText) {
             return null;
         }
         const data = await response.json();
-        const newScore = Number(data.summary?.score || 0);
+        const newScore = Number(data.summary?.final_score || data.summary?.score || 0);
         const base = Number(originalScore || 0);
         return Math.max(0, newScore - base);
     } catch {
@@ -479,14 +494,13 @@ async function showFixTransformation() {
         workflowTitleNode.textContent = "Improved draft ready - re-run scan to confirm";
     }
 
-    const improvement = await estimateImprovement(latestSummary ? latestSummary.score : 0, rewritten);
+    const currentScore = latestSummary ? Number(latestSummary.final_score || latestSummary.score || 0) : 0;
+    const improvement = await estimateImprovement(currentScore, rewritten);
     if (improvementEstimateNode) {
         if (improvement === null) {
-            improvementEstimateNode.textContent = "Estimated inbox improvement: +18% to +35%";
+            improvementEstimateNode.textContent = "Score lift estimate unavailable - click Analyze Email Risk to measure.";
         } else {
-            const minGain = Math.max(8, Math.round(improvement * 0.8));
-            const maxGain = Math.max(minGain + 6, Math.round(improvement * 1.2) + 6);
-            improvementEstimateNode.textContent = `Estimated inbox improvement: +${minGain}% to +${maxGain}%`;
+            improvementEstimateNode.textContent = `Estimated score lift after rewrite: +${Math.round(improvement)} points`;
         }
     }
 
