@@ -494,36 +494,39 @@ def score_risk(signals: Dict) -> Dict:
     content_score = _clamp_score(baseline_score - content_penalty_points)
     final_score = _clamp_score(baseline_score - total_penalty)
 
-    # Heuristic risk band (not inbox prediction).
+    # Risk band (diagnostic, not inbox prediction).
     if final_score >= 80:
-        risk_band = "Low Heuristic Risk"
+        risk_band = "Content Safe"
         risk_pill_style = "low"
     elif final_score >= 60:
-        risk_band = "Medium Heuristic Risk"
+        risk_band = "Needs Review"
         risk_pill_style = "medium"
     else:
-        risk_band = "High Heuristic Risk"
+        risk_band = "High Spam-Risk Signals"
         risk_pill_style = "high"
 
-    if content_score >= 88 and infra_penalty_points > 0:
-        verdict_label = "Content Safe but Reputation/Infra Dependent"
-    elif content_score >= 88 and infra_penalty_points == 0:
-        verdict_label = "Content Safe (Heuristic)"
-    elif final_score >= 70:
-        verdict_label = "Needs Review Before Send"
+    major_content_flags = content_penalty_points >= 25
+    major_infra_flags = infra_penalty_points >= 30
+    if final_score >= 80 and not major_content_flags and not major_infra_flags:
+        verdict_label = "Content Safe but Reputation Dependent"
+    elif final_score >= 60:
+        verdict_label = "Mixed Signals - Reputation Dependent"
     else:
-        verdict_label = "High Failure Risk - Fix Before Send"
+        verdict_label = "Strong Risk Signals Detected"
+
+    real_world_risk = (
+        "UNKNOWN (sender reputation and engagement history are not analyzed)"
+        if final_score >= 70
+        else "ELEVATED from content/technical signals (reputation still unknown)"
+    )
 
     missing_factors = [
         "Sender reputation history",
-        "Spam complaint trends",
-        "Engagement behavior (opens/replies/deletes)",
-        "Sending pattern anomalies (volume spikes/warmup)",
+        "Spam complaint/report rates",
+        "Recipient engagement history",
+        "Sending frequency/volume spikes",
+        "Mailbox-provider similarity clustering",
     ]
-
-    real_world_risk = "Unknown (reputation and engagement signals are not analyzed)"
-    if full_mode and infra_penalty_points == 0 and content_penalty_points <= 10:
-        real_world_risk = "Partially known (content+infra look healthy, reputation still unknown)"
 
     # Confidence model.
     if not full_mode:
@@ -587,11 +590,11 @@ def score_risk(signals: Dict) -> Dict:
 
         provider_score = _clamp_score(baseline_score - issue_points)
         if provider_score >= 80:
-            provider_status = "low_risk"
+            provider_status = "content_safe"
         elif provider_score >= 60:
-            provider_status = "medium_risk"
+            provider_status = "needs_review"
         else:
-            provider_status = "high_risk"
+            provider_status = "high_risk_signals"
 
         provider_top_issue = "No major provider-specific issue"
         if provider_issues:
@@ -621,10 +624,10 @@ def score_risk(signals: Dict) -> Dict:
         "analysis_mode": mode,
         "analysis_mode_label": mode_label,
         "analysis_mode_note": mode_note,
+        "capability_note": "This is a content + technical risk analyzer, not an inbox placement predictor.",
         "verdict_label": verdict_label,
         "real_world_risk": real_world_risk,
         "missing_factors": missing_factors,
-        "capability_note": "This is a content+infrastructure heuristic check. It does NOT include sender reputation or engagement signals used by mailbox providers.",
         "infra_included": full_mode,
         "content_score": content_score,
         "infra_impact": -infra_penalty_points,
