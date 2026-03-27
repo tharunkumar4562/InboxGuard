@@ -242,34 +242,90 @@ def _extract_subject_and_body(original_text: str) -> Dict[str, str]:
     return {"subject": subject, "body": body}
 
 
+def _extract_pain_point(body: str) -> str:
+    """Extract the core problem/benefit the email is trying to communicate."""
+    low = (body or "").lower()
+    
+    # Specific pain point detection
+    pain_points = {
+        "funding|loan|finance": "Are you currently exploring funding options?",
+        "sales|lead|prospect": "Are you actively building your pipeline right now?",
+        "automation|workflow|process": "Still spending time on manual work here?",
+        "support|issue|problem": "Running into any blockers with this?",
+        "marketing|campaign|reach": "Working on growing your reach?",
+        "training|learn|skill": "Looking to upgrade your skills?",
+        "hiring|talent|recruit": "Currently hiring for this area?",
+        "data|analytics|metric": "Trying to get better visibility into this?",
+        "security|compliance|risk": "Dealing with any security concerns here?",
+        "cost|budget|reduce": "Looking to cut costs in this area?",
+    }
+    
+    for keywords, question in pain_points.items():
+        if any(kw in low for kw in keywords.split("|")):
+            return question
+    
+    return "Still dealing with challenges in this area?"
+
+
+def _extract_core_value(body: str) -> str:
+    """Extract the 1-2 sentence core value from a longer email."""
+    # Remove common preamble/closing patterns
+    text = body
+    text = re.sub(r"^(hi|hello|dear|hey).*?\n\n", "", text, flags=re.IGNORECASE | re.DOTALL)
+    text = re.sub(r"\n\n(best regards|sincerely|thanks|thank you).*$", "", text, flags=re.IGNORECASE | re.DOTALL)
+    
+    # Get first 1-2 sentences
+    sentences = re.split(r'(?<=[.!?])\s+', text.strip())
+    core = " ".join(sentences[:2]).strip()
+    
+    # Truncate if still too long
+    if len(core) > 150:
+        core = core[:150].rsplit(" ", 1)[0] + "."
+    
+    return core if core else "We've built something worth checking out."
+
+
 def _rewrite_cold_outreach(context: str) -> str:
+    """Generate a dramatically shortened, 1:1 conversational rewrite."""
     return (
         f"Hey {{{{first_name}}}},\n\n"
-        f"Saw you're working with {context}.\n\n"
-        "Are you currently dealing with cleanup after each send?\n\n"
-        "We built this to remove that step and keep outputs ready to use.\n\n"
-        "Worth a quick look?"
+        f"Quick question — are you exploring solutions for {context}?\n\n"
+        f"We've helped a few people in your space get this working smoothly.\n\n"
+        f"If you're open, I can share how."
+    )
+
+
+def _rewrite_cold_outreach_aggressive(body: str, context: str) -> str:
+    """Ultra-short 1:1 rewrite (80-100 words max)."""
+    pain = _extract_pain_point(body)
+    # Remove the "Are you..." prefix since we include it below
+    pain_question = pain
+    
+    return (
+        f"Hey {{{{first_name}}}},\n\n"
+        f"{pain_question}\n\n"
+        f"We built {context} specifically for this.\n\n"
+        f"Worth 5 minutes?"
     )
 
 
 def _rewrite_update_or_transactional(subject: str, body: str) -> str:
+    """Rewrite policy/transactional emails to be concise and scannable."""
     core = body
     core = re.sub(r"^(hi there|hello there|dear user|dear customer)[,\s]*", "", core, flags=re.IGNORECASE)
-    core = re.sub(r"\bwe'?re excited to\b", "", core, flags=re.IGNORECASE)
+    core = re.sub(r"\bwe'?re (excited|pleased|thrilled) to\b", "", core, flags=re.IGNORECASE)
     core = re.sub(r"\bmajor (update|upgrade)\b", "update", core, flags=re.IGNORECASE)
     core = re.sub(r"\s+", " ", core).strip()
 
-    first_sentence = core.split(".")[0].strip() if core else ""
-    short_note = first_sentence[:180].strip()
-    if short_note and not short_note.endswith((".", "?", "!")):
-        short_note += "."
-
-    subject_line = subject or "important policy update"
+    # Extract the actual value
+    value = _extract_core_value(core)
+    
+    subject_line = subject or "important update"
     return (
         f"Hey {{{{first_name}}}},\n\n"
-        f"Quick heads up about {subject_line.lower()}.\n\n"
-        f"{short_note or 'There is a policy update that may affect your current workflow.'}\n\n"
-        "If useful, I can send a short summary with only the key actions."
+        f"Quick heads up — {subject_line.lower()}.\n\n"
+        f"{value}\n\n"
+        f"Let me know if you have questions."
     )
 
 
@@ -287,41 +343,73 @@ def rewrite_email_text(
     parsed = _extract_subject_and_body(text)
     subject = parsed["subject"]
     body = parsed["body"]
-
-    lines = text.splitlines()
-    lines = _strip_feature_lines(lines)
-    text = "\n".join(lines)
-
-    # Force personal 1:1 salutation when generic greeting appears.
-    text = _replace_salutation(text)
-
-    # Soften hard CTA language.
-    text = _soften_cta(text)
-
-    # Ensure we open as a conversational question, especially for broadcast-like drafts.
+    
+    # Detect if this is broadcast-style (the biggest flag for needed transformation)
     issue_blob = " ".join(detected_issues or []).lower()
+    is_broadcast = "broadcast" in issue_blob or "personalization" in issue_blob or "mass" in issue_blob
     normalized_intent = (intent_type or "").strip().lower()
-
-    if "broadcast" in issue_blob or "personalization" in issue_blob or "mass" in issue_blob:
+    
+    # COLD OUTREACH / BROADCAST EMAILS: Use specific, context-aware rewrite
+    if is_broadcast or "cold" in normalized_intent or "outreach" in normalized_intent:
         context = _derive_context_hint(original_text)
-        text = _rewrite_cold_outreach(context)
-    elif normalized_intent in {"informational/system", "transactional"}:
+        
+        if aggressive:
+            # Ultra-aggressive: extremely short, 1:1, curiosity-driven
+            text = _rewrite_cold_outreach_aggressive(body, context)
+        else:
+            # Standard: concise but slightly more context
+            text = _rewrite_cold_outreach(context)
+    
+    # TRANSACTIONAL / POLICY UPDATES: Use concise notification style
+    elif normalized_intent in {"informational/system", "transactional", "update"}:
         text = _rewrite_update_or_transactional(subject, body)
+    
+    # EVERYTHING ELSE: Add conversational question hook
     else:
-        text = _ensure_question_hook(text, "medium")
-
-    # Normalize whitespace and shorten for readability.
+        # Ensure we have a question to hook the reader
+        text = _ensure_question_hook(text, "high" if aggressive else "medium")
+    
+    # Final cleanup
     text = re.sub(r"\n{3,}", "\n\n", text)
-    shorten_mode = str(profile.get("shorten_aggressiveness", "medium"))
+    text = text.strip()
+    
+    # Aggressive mode: TARGET 80-100 WORDS (vs. normal 120+)
     if aggressive:
-        shorten_mode = "high"
-    text = _shorten_text(text, shorten_mode)
+        # Hard cut at word count
+        words = text.split()
+        if len(words) > 100:
+            kept = " ".join(words[:100]).strip()
+            # Ensure we end at a sentence boundary
+            if not kept.endswith((".", "?", "!")):
+                last_sentence_end = max(
+                    kept.rfind("."),
+                    kept.rfind("?"),
+                    kept.rfind("!"),
+                )
+                if last_sentence_end > 0:
+                    kept = kept[:last_sentence_end + 1]
+                else:
+                    kept += "."
+            text = kept
+    else:
+        # Normal mode: 120-140 words
+        words = text.split()
+        if len(words) > 150:
+            kept = " ".join(words[:120]).strip()
+            if not kept.endswith((".", "?", "!")):
+                last_sentence_end = max(
+                    kept.rfind("."),
+                    kept.rfind("?"),
+                    kept.rfind("!"),
+                )
+                if last_sentence_end > 0:
+                    kept = kept[:last_sentence_end + 1]
+                else:
+                    kept += "."
+            text = kept
 
+    # Guarantee minimum personalization
     if "{{first_name}}" not in text.lower():
         text = f"Hey {{{{first_name}}}},\n\n{text}" if text else "Hey {{{{first_name}}}},"
-
-    # Keep minimum useful context so rewrite does not collapse into empty output.
-    if len(text.split()) < 20:
-        text = f"{text}\n\nIf useful, I can share a short example for your workflow."
 
     return text.strip()

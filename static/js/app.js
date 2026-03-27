@@ -204,11 +204,11 @@ function renderStatus(summary, signals, findings) {
     }
 
     const band = String(summary.risk_band || "Needs Review");
-    let label = "Warning";
+    let label = "At Risk";
     let cls = "warning";
 
     if (band === "High Spam-Risk Signals" || band === "High Risk") {
-        label = "Critical";
+        label = "Likely Filtered";
         cls = "critical";
     } else if (band === "Content Safe") {
         label = "Safe";
@@ -266,11 +266,11 @@ function renderBiggestRisk(summary, findings) {
     if (!top) {
         if (hasScanResult) {
             biggestRiskTitleNode.textContent = "No critical issue detected";
-            biggestRiskDescNode.textContent = "No major blocker found in this scan. Keep message concise and specific.";
+            biggestRiskDescNode.textContent = "Clean content signal profile. Still good practice to make emails shorter and more personal.";
             setImpactBadge(biggestRiskImpactNode, "LOW");
             biggestRiskCard.classList.remove("card-critical");
             if (trustHookNode) {
-                trustHookNode.textContent = "Scan complete. Use Fix Email Now only if you want a shorter, more personal version.";
+                trustHookNode.textContent = "Scan complete. Use Fix My Email to make it 1:1 and personal.";
             }
             return;
         }
@@ -282,12 +282,20 @@ function renderBiggestRisk(summary, findings) {
     }
 
     const title = String(top.title || "risk signal").toLowerCase();
-    biggestRiskTitleNode.textContent = title.includes("broadcast")
+    const impactStatement = title.includes("broadcast")
         ? "This will likely be filtered as spam"
-        : (top.title || "Top risk detected");
+        : title.includes("urgency") || title.includes("pressure")
+            ? "This looks like pressure language — reduces trust"
+            : title.includes("link") || title.includes("image")
+                ? "Too many links/images for cold outreach — flagged as bulk"
+                : title.includes("personalization")
+                    ? "Looks like a mass send — inbox filters catch these first"
+                    : (top.title || "Top risk detected");
+
+    biggestRiskTitleNode.textContent = impactStatement;
 
     const reason = (top.issue || top.impact || "Pattern increases spam filtering risk").split(".")[0];
-    biggestRiskDescNode.textContent = `Reason: ${reason}.`;
+    biggestRiskDescNode.textContent = `Why it matters: ${reason}`;
 
     const sev = String(top.severity || "medium").toLowerCase();
     const impact = sev === "high" ? "HIGH" : sev === "low" ? "LOW" : "MEDIUM";
@@ -295,7 +303,7 @@ function renderBiggestRisk(summary, findings) {
 
     if (trustHookNode) {
         const samples = latestLearningProfile && Number(latestLearningProfile.sample_size || 0) > 0
-            ? ` Feedback-trained on ${latestLearningProfile.sample_size} outcome sample(s).`
+            ? ` Model trained on ${latestLearningProfile.sample_size} outcome(s).`
             : "";
         trustHookNode.textContent = `Bulk-pattern check.${samples}`;
     }
@@ -316,14 +324,14 @@ function renderConsequences(summary) {
     const high = ["High Spam-Risk Signals", "High Risk"].includes(String(summary.risk_band || ""));
     const lines = high
         ? [
-            "Gmail/Outlook may classify this as bulk or spam.",
-            "If repeated, sender reputation can drop over the next few sends.",
-            "Fix before sending to avoid compounding risk.",
+            "This email will likely be filtered or land in spam if you send it now.",
+            "Repeated sends with these patterns will damage your domain reputation.",
+            "Fix this before sending — use the safer version below.",
         ]
         : [
-            "Risk is lower, but weak patterns can still hurt placement.",
-            "Use the fixed version to reduce bulk-like signals before send.",
-            "Re-scan after edits to confirm risk stays low.",
+            "This can still land in spam if unchanged.",
+            "Repeated sends from this account compound the filtering risk.",
+            "Fix it now to protect future deliverability.",
         ];
 
     lines.forEach((line) => {
@@ -490,13 +498,16 @@ async function showFixTransformation() {
 
         fixOutput.classList.remove("hidden");
         fixOutput.classList.add("fade-in");
+
+        // Auto-scroll to transformation with immediate visibility
+        await sleep(100);
         fixOutput.scrollIntoView({ behavior: "smooth", block: "start" });
     } catch (error) {
         showError(error && error.message ? error.message : "Rewrite failed.");
     }
 
     fixNowButton.disabled = false;
-    fixNowButton.textContent = "Fix Email Now";
+    fixNowButton.textContent = "Fix My Email";
 }
 
 function useFixedVersion() {
@@ -539,7 +550,7 @@ async function sendFeedback(outcome) {
         const data = await response.json();
         latestLearningProfile = data.learning_profile || latestLearningProfile;
         const samples = latestLearningProfile ? Number(latestLearningProfile.sample_size || 0) : 0;
-        showError(`Feedback saved. Model updated with ${samples} sample(s).`);
+        showError(`Feedback saved. System learned from this outcome (${samples} total).`);
     } catch (error) {
         showError(error && error.message ? error.message : "Could not save feedback");
     }
