@@ -201,13 +201,16 @@ def _ensure_question_hook(text: str, strength: str) -> str:
     return "\n".join(rebuilt)
 
 
-def _shorten_text(text: str, aggressiveness: str) -> str:
+def _shorten_text(text: str, aggressiveness: str, hard_cap: int | None = None) -> str:
     words = text.split()
     max_words = 120
     if aggressiveness == "high":
         max_words = 90
     elif aggressiveness == "low":
         max_words = 140
+
+    if hard_cap is not None:
+        max_words = min(max_words, int(hard_cap))
 
     if len(words) <= max_words:
         return text
@@ -229,24 +232,74 @@ def _derive_context_hint(text: str) -> str:
     return "your current workflow"
 
 
-def rewrite_email_text(original_text: str, detected_issues: List[str] | None = None) -> str:
+def _extract_update_topic(text: str) -> str:
+    low = (text or "").lower()
+    if "copilot" in low and "data" in low:
+        return "Copilot interaction data handling"
+    if "policy" in low:
+        return "policy update"
+    if "billing" in low:
+        return "billing update"
+    if "security" in low:
+        return "security update"
+    return "important update"
+
+
+def _with_article(phrase: str) -> str:
+    value = (phrase or "").strip()
+    if not value:
+        return "an update"
+    first = value[0].lower()
+    article = "an" if first in {"a", "e", "i", "o", "u"} else "a"
+    return f"{article} {value}"
+
+
+def _strip_subject_and_headers(text: str) -> str:
+    lines = [line for line in (text or "").splitlines()]
+    cleaned: List[str] = []
+    for line in lines:
+        if re.match(r"^\s*(subject|from|to|cc|bcc|date):", line, flags=re.IGNORECASE):
+            continue
+        cleaned.append(line)
+    return "\n".join(cleaned).strip()
+
+
+def rewrite_email_text(
+    original_text: str,
+    detected_issues: List[str] | None = None,
+    intent: str = "cold outreach",
+    aggressive: bool = True,
+) -> Dict:
     profile = get_learning_profile()
-    text = (original_text or "").strip()
+    text = _strip_subject_and_headers((original_text or "").strip())
     if not text:
-        return ""
+        return {"text": "", "reasons": [], "intent_used": intent}
+
+    reasons: List[str] = []
 
     lines = text.splitlines()
     lines = _strip_feature_lines(lines)
-    text = "\n".join(lines)
+    if len(lines) < len(text.splitlines()):
+        reasons.append("Removed feature-list and campaign-style lines to reduce bulk pattern signals")
+
+    text = "\n".join(lines).strip()
 
     # Force personal 1:1 salutation when generic greeting appears.
+    previous = text
     text = _replace_salutation(text)
+    if text != previous:
+        reasons.append("Added direct recipient placeholder to increase 1:1 trust cues")
 
     # Soften hard CTA language.
+    previous = text
     text = _soften_cta(text)
+    if text != previous:
+        reasons.append("Softened call-to-action to lower sales-pressure patterns")
 
-    # Ensure we open as a conversational question, especially for broadcast-like drafts.
+    intent_norm = (intent or "cold outreach").strip().lower()
     issue_blob = " ".join(detected_issues or []).lower()
+
+    # Prioritize high-risk broadcast patterns regardless of detected intent label.
     if "broadcast" in issue_blob or "personalization" in issue_blob or "mass" in issue_blob:
         context = _derive_context_hint(original_text)
         text = (
@@ -256,12 +309,38 @@ def rewrite_email_text(original_text: str, detected_issues: List[str] | None = N
             "We built this to remove that step and keep outputs ready to use.\n\n"
             "Worth a quick look?"
         )
+        reasons.append("Rebuilt message into short 1:1 outreach with one clear question and one outcome")
+    # Intent-aware rewriting to avoid rewriting all drafts as cold outreach.
+    elif intent_norm in {"transactional", "informational/system", "informational"}:
+        topic = _extract_update_topic(original_text)
+        text = (
+            f"Hey {{{{first_name}}}},\n\n"
+            f"Quick heads up: there is {_with_article(topic)}.\n\n"
+            "Your current preference remains unchanged unless you opt in to new behavior.\n\n"
+            "Want the 2-line summary?"
+        )
+        reasons.append("Condensed announcement copy into a short, recipient-first update")
+    elif intent_norm in {"marketing/newsletter", "cold outreach"}:
+        context = _derive_context_hint(original_text)
+        text = (
+            f"Hey {{{{first_name}}}},\n\n"
+            f"Saw you're working with {context}.\n\n"
+            "Are you currently dealing with cleanup after each send?\n\n"
+            "We built this to remove that step and keep outputs ready to use.\n\n"
+            "Worth a quick look?"
+        )
+        reasons.append("Rebuilt message into short 1:1 outreach with one clear question and one outcome")
     else:
-        text = _ensure_question_hook(text, "medium")
+        text = _ensure_question_hook(text, str(profile.get("question_hook_strength", "medium")))
+        reasons.append("Added conversational question hook to reduce broadcast tone")
 
     # Normalize whitespace and shorten for readability.
     text = re.sub(r"\n{3,}", "\n\n", text)
-    text = _shorten_text(text, str(profile.get("shorten_aggressiveness", "medium")))
+    hard_cap = 120 if aggressive else 150
+    before_words = len(text.split())
+    text = _shorten_text(text, str(profile.get("shorten_aggressiveness", "medium")), hard_cap=hard_cap)
+    if len(text.split()) < before_words:
+        reasons.append("Shortened copy to reduce bulk-email footprint")
 
     if "{{first_name}}" not in text.lower():
         text = f"Hey {{{{first_name}}}},\n\n{text}" if text else "Hey {{{{first_name}}}},"
@@ -269,5 +348,11 @@ def rewrite_email_text(original_text: str, detected_issues: List[str] | None = N
     # Keep minimum useful context so rewrite does not collapse into empty output.
     if len(text.split()) < 25:
         text = f"{text}\n\nIf useful, I can share a short example for your workflow."
+        reasons.append("Added minimal context to keep message useful while staying concise")
 
-    return text.strip()
+    deduped_reasons = list(dict.fromkeys(reasons))
+    return {
+        "text": text.strip(),
+        "reasons": deduped_reasons,
+        "intent_used": intent_norm,
+    }

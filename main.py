@@ -287,22 +287,38 @@ def rewrite_email(
     before_summary = before.get("summary", {})
     findings = before.get("partial_findings", [])
     issue_titles = [str(item.get("title", "")) for item in findings if isinstance(item, dict)]
-
-    rewritten = rewrite_email_text(original, issue_titles)
-    after = analyze_email(rewritten, clean_domain, rewritten, mode)
-    after_summary = after.get("summary", {})
+    intent = str(before_summary.get("email_type", "cold outreach"))
 
     before_score = int(before_summary.get("final_score", before_summary.get("score", 0)))
-    after_score = int(after_summary.get("final_score", after_summary.get("score", 0)))
+    best_text = original
+    best_summary = before_summary
+    best_score = before_score
+    best_reasons = ["No safer rewrite found for this draft"]
 
-    # Trust guardrail: never return a rewrite that performs worse than the original.
-    if after_score < before_score:
-        rewritten = original
-        after = before
-        after_summary = before_summary
-        after_score = before_score
+    candidates = [
+        rewrite_email_text(original, issue_titles, intent=intent, aggressive=True),
+        rewrite_email_text(original, issue_titles, intent=intent, aggressive=False),
+    ]
+
+    for candidate in candidates:
+        candidate_text = str(candidate.get("text", "")).strip()
+        if not candidate_text:
+            continue
+        candidate_after = analyze_email(candidate_text, clean_domain, candidate_text, mode)
+        candidate_summary = candidate_after.get("summary", {})
+        candidate_score = int(candidate_summary.get("final_score", candidate_summary.get("score", 0)))
+        if candidate_score > best_score:
+            best_text = candidate_text
+            best_summary = candidate_summary
+            best_score = candidate_score
+            best_reasons = list(candidate.get("reasons", []))
+
+    rewritten = best_text
+    after_summary = best_summary
+    after_score = best_score
 
     score_delta = after_score - before_score
+    improved = score_delta > 0 and _risk_rank(str(after_summary.get("risk_band", "Needs Review"))) <= _risk_rank(str(before_summary.get("risk_band", "Needs Review")))
 
     from_band = str(before_summary.get("risk_band", "Needs Review"))
     to_band = str(after_summary.get("risk_band", "Needs Review"))
@@ -314,7 +330,8 @@ def rewrite_email(
             "score_delta": score_delta,
             "from_risk_band": from_band,
             "to_risk_band": to_band,
-            "improved": _risk_rank(to_band) < _risk_rank(from_band),
+            "improved": improved,
+            "intent": intent,
         },
     )
 
@@ -327,6 +344,9 @@ def rewrite_email(
         "from_score": before_score,
         "to_score": after_score,
         "score_delta": score_delta,
+        "improved": improved,
+        "rewrite_reasons": best_reasons,
+        "intent": intent,
         "learning_profile": get_learning_profile(),
         "before_summary": before_summary,
         "after_summary": after_summary,
