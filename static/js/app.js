@@ -31,12 +31,13 @@ const topFixesListNode = document.getElementById("top-fixes-list");
 const scoreBreakdownNode = document.getElementById("score-breakdown");
 
 const fixNowButton = document.getElementById("fix-now");
+const rewriteActionButton = document.getElementById("rewrite-action");
+const personalizeActionButton = document.getElementById("personalize-action");
+const domainActionButton = document.getElementById("domain-action");
 
 const workflowStateNode = document.getElementById("workflow-state");
 const workflowTitleNode = document.getElementById("workflow-title");
 const improvementEstimateNode = document.getElementById("improvement-estimate");
-const beliefLineNode = document.getElementById("belief-line");
-const rewriteReasonsNode = document.getElementById("rewrite-reasons");
 const fixOutput = document.getElementById("fix-output");
 const beforeEmailNode = document.getElementById("before-email");
 const afterEmailNode = document.getElementById("after-email");
@@ -58,6 +59,7 @@ let latestSummary = null;
 let latestFindings = [];
 let latestRewriteContext = null;
 let latestLearningProfile = null;
+let hasScanResult = false;
 
 const errorBanner = document.createElement("div");
 errorBanner.id = "error-banner";
@@ -108,6 +110,7 @@ function activateTab(tab) {
 }
 
 function setIdleState() {
+    hasScanResult = false;
     if (resultSection) {
         resultSection.classList.add("hidden");
     }
@@ -204,16 +207,6 @@ function renderStatus(summary, signals, findings) {
     }
 
     const band = String(summary.risk_band || "Needs Review");
-    const confidence = String(summary.deliverability_confidence || "medium").toLowerCase();
-    const mode = String(summary.analysis_mode || "content");
-    let infraLabel = "Not Checked";
-    if (mode !== "content") {
-        const spf = String(signals.spf_status || "unknown");
-        const dkim = String(signals.dkim_status || "unknown");
-        const dmarc = String(signals.dmarc_status || "unknown");
-        infraLabel = spf === "found" && dkim === "found" && dmarc === "found" ? "Healthy" : "Needs Attention";
-    }
-
     let label = "Warning";
     let cls = "warning";
 
@@ -225,7 +218,14 @@ function renderStatus(summary, signals, findings) {
         cls = "safe";
     }
 
-    if (cls === "safe" && (confidence === "low" || infraLabel === "Needs Attention")) {
+    const confidence = String(summary.deliverability_confidence || "medium");
+    const mode = String(summary.analysis_mode || "content");
+    const spf = String(signals.spf_status || "unknown");
+    const dkim = String(signals.dkim_status || "unknown");
+    const dmarc = String(signals.dmarc_status || "unknown");
+    const infraHealthy = spf === "found" && dkim === "found" && dmarc === "found";
+
+    if (band === "Content Safe" && (confidence === "low" || (mode === "full" && !infraHealthy))) {
         label = "Low Risk (Incomplete Check)";
         cls = "warning";
     }
@@ -251,7 +251,11 @@ function renderStatus(summary, signals, findings) {
         : "based on content-only signals";
     statusConfidenceNode.textContent = `${confidence.charAt(0).toUpperCase()}${confidence.slice(1)} confidence (${confidenceBasis})`;
 
-    statusInfraNode.textContent = infraLabel;
+    if (mode === "content") {
+        statusInfraNode.textContent = "Not Checked";
+    } else {
+        statusInfraNode.textContent = infraHealthy ? "Healthy" : "Needs Attention";
+    }
 }
 
 function renderBiggestRisk(summary, findings) {
@@ -263,13 +267,20 @@ function renderBiggestRisk(summary, findings) {
     const top = nonMeta[0];
 
     if (!top) {
-        biggestRiskTitleNode.textContent = "No critical issue detected";
-        biggestRiskDescNode.textContent = String(summary.confidence_note || "No high-impact content risk was detected in this draft.");
+        if (hasScanResult) {
+            biggestRiskTitleNode.textContent = "No critical issue detected";
+            biggestRiskDescNode.textContent = "No major blocker found in this scan. Keep message concise and specific.";
+            setImpactBadge(biggestRiskImpactNode, "LOW");
+            biggestRiskCard.classList.remove("card-critical");
+            if (trustHookNode) {
+                trustHookNode.textContent = "Scan complete. Use Fix Email Now only if you want a shorter, more personal version.";
+            }
+            return;
+        }
+        biggestRiskTitleNode.textContent = "No scan yet";
+        biggestRiskDescNode.textContent = "Run analysis to detect the top deliverability blocker.";
         setImpactBadge(biggestRiskImpactNode, "LOW");
         biggestRiskCard.classList.remove("card-critical");
-        if (trustHookNode) {
-            trustHookNode.textContent = "Low-risk state can still depend on sender reputation and infra health.";
-        }
         return;
     }
 
@@ -286,7 +297,10 @@ function renderBiggestRisk(summary, findings) {
     setImpactBadge(biggestRiskImpactNode, impact);
 
     if (trustHookNode) {
-        trustHookNode.textContent = "Pattern matched to bulk-email risk signals.";
+        const samples = latestLearningProfile && Number(latestLearningProfile.sample_size || 0) > 0
+            ? ` Feedback-trained on ${latestLearningProfile.sample_size} outcome sample(s).`
+            : "";
+        trustHookNode.textContent = `Bulk-pattern check.${samples}`;
     }
 
     if (impact === "HIGH") {
@@ -305,14 +319,14 @@ function renderConsequences(summary) {
     const high = ["High Spam-Risk Signals", "High Risk"].includes(String(summary.risk_band || ""));
     const lines = high
         ? [
-            "Likely filtered as bulk or spam by mailbox providers.",
-            "Inbox placement can drop across future sends.",
-            "Domain reputation can degrade if unchanged drafts are sent repeatedly.",
+            "Gmail/Outlook may classify this as bulk or spam.",
+            "If repeated, sender reputation can drop over the next few sends.",
+            "Fix before sending to avoid compounding risk.",
         ]
         : [
-            "Current draft is lower-risk, but sender reputation still affects inbox placement.",
-            "Repeated weak drafts can still reduce sender trust over time.",
-            "Apply fix before send to keep risk low.",
+            "Risk is lower, but weak patterns can still hurt placement.",
+            "Use the fixed version to reduce bulk-like signals before send.",
+            "Re-scan after edits to confirm risk stays low.",
         ];
 
     lines.forEach((line) => {
@@ -322,7 +336,7 @@ function renderConsequences(summary) {
     });
 }
 
-function renderHurting(summary, findings) {
+function renderHurting(findings) {
     if (!hurtListNode) {
         return;
     }
@@ -331,7 +345,7 @@ function renderHurting(summary, findings) {
     const nonMeta = (findings || []).filter((f) => !String(f.title || "").toLowerCase().includes("analysis mode"));
 
     if (!nonMeta.length) {
-        hurtListNode.innerHTML = "<li>No major blocker detected for this draft.</li>";
+        hurtListNode.innerHTML = "<li>No scan yet - run analysis to detect deliverability risks.</li>";
         return;
     }
 
@@ -458,6 +472,13 @@ async function showFixTransformation() {
             score_delta: Number(data.score_delta || 0),
         };
 
+        const changed = latestRewriteContext.score_delta > 0 || latestRewriteContext.from_risk_band !== latestRewriteContext.to_risk_band;
+        if (!changed) {
+            showError("No reliable risk reduction found yet. Edit manually and re-scan.");
+            fixOutput.classList.add("hidden");
+            return;
+        }
+
         if (workflowStateNode) {
             workflowStateNode.textContent = "Step 2: Fix complete";
         }
@@ -467,30 +488,7 @@ async function showFixTransformation() {
 
         if (improvementEstimateNode) {
             const delta = Number(data.score_delta || 0);
-            if (Boolean(data.improvement_visible)) {
-                improvementEstimateNode.textContent = `Risk shift: ${data.from_risk_band} -> ${data.to_risk_band} | Score delta: ${delta >= 0 ? "+" : ""}${delta}`;
-            } else {
-                improvementEstimateNode.textContent = "Rewrite applied with clearer structure. Re-scan in Full mode for deeper risk change.";
-            }
-        }
-
-        if (beliefLineNode) {
-            beliefLineNode.textContent = String(data.belief_line || "This version reduces bulk-email patterns commonly flagged by Gmail and Outlook.");
-        }
-
-        if (rewriteReasonsNode) {
-            rewriteReasonsNode.innerHTML = "";
-            const reasons = Array.isArray(data.rewrite_reasons) ? data.rewrite_reasons : [];
-            reasons.slice(0, 4).forEach((reason) => {
-                const li = document.createElement("li");
-                li.textContent = String(reason);
-                rewriteReasonsNode.appendChild(li);
-            });
-            if (!reasons.length) {
-                const li = document.createElement("li");
-                li.textContent = "Rewrite generated with lower bulk-email pattern density.";
-                rewriteReasonsNode.appendChild(li);
-            }
+            improvementEstimateNode.textContent = `Risk shift: ${data.from_risk_band} -> ${data.to_risk_band} | Score delta: ${delta >= 0 ? "+" : ""}${delta}`;
         }
 
         fixOutput.classList.remove("hidden");
@@ -502,6 +500,25 @@ async function showFixTransformation() {
 
     fixNowButton.disabled = false;
     fixNowButton.textContent = "Fix Email Now";
+}
+
+function runQuickRewrite() {
+    showFixTransformation();
+}
+
+function addPersonalization() {
+    if (!rawEmailInput) {
+        return;
+    }
+    rawEmailInput.value = `Hi {{FirstName}},\nI noticed [recipient-specific detail].\n\n${rawEmailInput.value || ""}`;
+}
+
+function checkDomainHealth() {
+    if (!analysisModeInput) {
+        return;
+    }
+    analysisModeInput.value = "full";
+    activateTab("threat-scan");
 }
 
 function useFixedVersion() {
@@ -558,6 +575,15 @@ if (threatScanTab) {
 }
 if (fixNowButton) {
     fixNowButton.addEventListener("click", showFixTransformation);
+}
+if (rewriteActionButton) {
+    rewriteActionButton.addEventListener("click", runQuickRewrite);
+}
+if (personalizeActionButton) {
+    personalizeActionButton.addEventListener("click", addPersonalization);
+}
+if (domainActionButton) {
+    domainActionButton.addEventListener("click", checkDomainHealth);
 }
 if (useFixedButton) {
     useFixedButton.addEventListener("click", useFixedVersion);
@@ -616,6 +642,7 @@ if (form) {
             const signals = data.signals || {};
             const findings = data.partial_findings || summary.findings || [];
             latestLearningProfile = data.learning_profile || latestLearningProfile;
+            hasScanResult = true;
 
             latestSummary = summary;
             latestFindings = findings;
@@ -623,7 +650,7 @@ if (form) {
             renderStatus(summary, signals, findings);
             renderBiggestRisk(summary, findings);
             renderConsequences(summary);
-            renderHurting(summary, findings);
+            renderHurting(findings);
             renderFixes(summary);
             renderBreakdown(summary);
 

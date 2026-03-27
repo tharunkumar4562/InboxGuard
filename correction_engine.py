@@ -3,7 +3,7 @@ import re
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List
 
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
@@ -229,156 +229,99 @@ def _derive_context_hint(text: str) -> str:
     return "your current workflow"
 
 
-def _extract_subject_and_body(text: str) -> Tuple[str, str]:
-    source = (text or "").strip()
-    if not source:
-        return "", ""
-
-    subject_match = re.search(r"^\s*Subject:\s*(.+)$", source, flags=re.IGNORECASE | re.MULTILINE)
+def _extract_subject_and_body(original_text: str) -> Dict[str, str]:
+    text = (original_text or "").strip()
+    subject_match = re.search(r"^\s*Subject:\s*(.+)$", text, flags=re.IGNORECASE | re.MULTILINE)
     subject = subject_match.group(1).strip() if subject_match else ""
 
-    body = re.sub(r"^\s*Subject:\s*.+$", "", source, flags=re.IGNORECASE | re.MULTILINE).strip()
-    body = re.sub(r"\n{3,}", "\n\n", body)
-    return subject, body
+    body = text
+    if subject_match:
+        body = re.sub(r"^\s*Subject:\s*.+$", "", text, count=1, flags=re.IGNORECASE | re.MULTILINE).strip()
+
+    body = re.sub(r"\s+", " ", body).strip()
+    return {"subject": subject, "body": body}
 
 
-def _clean_body_lines(body: str) -> List[str]:
-    lines = [line.strip() for line in (body or "").splitlines() if line.strip()]
-    cleaned = _strip_feature_lines(lines)
-    normalized: List[str] = []
-    for line in cleaned:
-        if not line:
-            continue
-        if re.match(r"^(to|from|cc|bcc):", line, flags=re.IGNORECASE):
-            continue
-        if re.match(r"^(hi there|hello there|dear user|dear customer|hi team|hello team)[,\s]*$", line, flags=re.IGNORECASE):
-            continue
-        normalized.append(line)
-    return normalized
-
-
-def _single_sentence_summary(lines: List[str], max_words: int = 24) -> str:
-    if not lines:
-        return ""
-    text = " ".join(lines)
-    text = _soften_cta(text)
-    text = re.sub(r"^(hi there|hello there|dear user|dear customer|hi team|hello team)[,\s]+", "", text, flags=re.IGNORECASE)
-    words = text.split()
-    short = " ".join(words[:max_words]).strip()
-    short = re.sub(r"\s+", " ", short)
-    if not short:
-        return ""
-    if short.endswith((".", "?", "!")):
-        return short
-    return f"{short}."
-
-
-def _rewrite_for_outreach(original_text: str, issue_blob: str, aggressiveness: str) -> Tuple[str, List[str]]:
-    _, body = _extract_subject_and_body(original_text)
-    lines = _clean_body_lines(body)
-    context = _derive_context_hint(original_text)
-
-    outcome_line = "We can remove that step so output is ready to use."
-    if "personalization" in issue_blob:
-        outcome_line = "This version is written as 1:1 outreach with a clear recipient hook."
-
-    cta = "Worth a quick look?"
-    if aggressiveness == "high":
-        cta = "Open to a quick look?"
-
-    summary_line = _single_sentence_summary(lines, 16 if aggressiveness == "high" else 20)
-    message = (
+def _rewrite_cold_outreach(context: str) -> str:
+    return (
         f"Hey {{{{first_name}}}},\n\n"
         f"Saw you're working with {context}.\n\n"
-        "Are you currently dealing with manual cleanup after each run?\n\n"
-        f"{outcome_line}\n\n"
-        f"{cta}"
+        "Are you currently dealing with cleanup after each send?\n\n"
+        "We built this to remove that step and keep outputs ready to use.\n\n"
+        "Worth a quick look?"
     )
 
-    if summary_line and len(summary_line.split()) <= 18 and "manual cleanup" not in summary_line.lower():
-        message = f"{message}\n\nContext: {summary_line}"
 
-    reasons = [
-        "Shorter copy reduces bulk-email pattern signals.",
-        "Recipient placeholder adds a 1:1 personalization cue.",
-        "Feature list replaced with one clear outcome.",
-        "CTA softened to reduce promotional pressure.",
-    ]
-    return message.strip(), reasons
+def _rewrite_update_or_transactional(subject: str, body: str) -> str:
+    core = body
+    core = re.sub(r"^(hi there|hello there|dear user|dear customer)[,\s]*", "", core, flags=re.IGNORECASE)
+    core = re.sub(r"\bwe'?re excited to\b", "", core, flags=re.IGNORECASE)
+    core = re.sub(r"\bmajor (update|upgrade)\b", "update", core, flags=re.IGNORECASE)
+    core = re.sub(r"\s+", " ", core).strip()
 
+    first_sentence = core.split(".")[0].strip() if core else ""
+    short_note = first_sentence[:180].strip()
+    if short_note and not short_note.endswith((".", "?", "!")):
+        short_note += "."
 
-def _rewrite_for_update(original_text: str, aggressiveness: str) -> Tuple[str, List[str]]:
-    subject, body = _extract_subject_and_body(original_text)
-    lines = _clean_body_lines(body)
-    summary = _single_sentence_summary(lines, 26 if aggressiveness == "low" else 20)
-
-    headline = "Quick heads up"
-    if subject:
-        headline = f"Quick heads up on {subject.lower()}"
-
-    cta = "If useful, I can send a shorter summary."
-    if aggressiveness == "high":
-        cta = "If useful, I can send a 2-line summary."
-
-    main_line = summary or "Sharing this update so there is no surprise later."
-    message = (
+    subject_line = subject or "important policy update"
+    return (
         f"Hey {{{{first_name}}}},\n\n"
-        f"{headline}.\n\n"
-        f"{main_line}\n\n"
-        f"{cta}"
+        f"Quick heads up about {subject_line.lower()}.\n\n"
+        f"{short_note or 'There is a policy update that may affect your current workflow.'}\n\n"
+        "If useful, I can send a short summary with only the key actions."
     )
 
-    reasons = [
-        "Condensed announcement into a short human update.",
-        "Removed corporate broadcast phrasing.",
-        "Kept one clear message to reduce bulk-like structure.",
-    ]
-    return message.strip(), reasons
 
-
-def rewrite_email_text(original_text: str, detected_issues: List[str] | None = None, intent: str = "cold outreach") -> str:
-    payload = rewrite_email_with_metadata(original_text, detected_issues, intent)
-    return payload["rewritten_text"]
-
-
-def rewrite_email_with_metadata(original_text: str, detected_issues: List[str] | None = None, intent: str = "cold outreach") -> Dict:
+def rewrite_email_text(
+    original_text: str,
+    detected_issues: List[str] | None = None,
+    intent_type: str = "cold outreach",
+    aggressive: bool = False,
+) -> str:
     profile = get_learning_profile()
-    original = (original_text or "").strip()
-    if not original:
-        return {"rewritten_text": "", "rewrite_reasons": [], "intent_used": intent}
+    text = (original_text or "").strip()
+    if not text:
+        return ""
 
+    parsed = _extract_subject_and_body(text)
+    subject = parsed["subject"]
+    body = parsed["body"]
+
+    lines = text.splitlines()
+    lines = _strip_feature_lines(lines)
+    text = "\n".join(lines)
+
+    # Force personal 1:1 salutation when generic greeting appears.
+    text = _replace_salutation(text)
+
+    # Soften hard CTA language.
+    text = _soften_cta(text)
+
+    # Ensure we open as a conversational question, especially for broadcast-like drafts.
     issue_blob = " ".join(detected_issues or []).lower()
-    resolved_intent = (intent or "cold outreach").strip().lower()
-    aggressiveness = str(profile.get("shorten_aggressiveness", "medium"))
+    normalized_intent = (intent_type or "").strip().lower()
 
-    if any(token in issue_blob for token in [
-        "broadcast",
-        "promotional",
-        "cta pressure",
-        "no personalization",
-        "generic salutation",
-        "automation footprint",
-    ]):
-        resolved_intent = "cold outreach"
-
-    if resolved_intent in ("cold outreach", "marketing/newsletter"):
-        text, reasons = _rewrite_for_outreach(original, issue_blob, aggressiveness)
+    if "broadcast" in issue_blob or "personalization" in issue_blob or "mass" in issue_blob:
+        context = _derive_context_hint(original_text)
+        text = _rewrite_cold_outreach(context)
+    elif normalized_intent in {"informational/system", "transactional"}:
+        text = _rewrite_update_or_transactional(subject, body)
     else:
-        text, reasons = _rewrite_for_update(original, aggressiveness)
+        text = _ensure_question_hook(text, "medium")
 
     # Normalize whitespace and shorten for readability.
     text = re.sub(r"\n{3,}", "\n\n", text)
-    text = _shorten_text(text, aggressiveness)
+    shorten_mode = str(profile.get("shorten_aggressiveness", "medium"))
+    if aggressive:
+        shorten_mode = "high"
+    text = _shorten_text(text, shorten_mode)
 
     if "{{first_name}}" not in text.lower():
         text = f"Hey {{{{first_name}}}},\n\n{text}" if text else "Hey {{{{first_name}}}},"
 
     # Keep minimum useful context so rewrite does not collapse into empty output.
-    if len(text.split()) < 25:
+    if len(text.split()) < 20:
         text = f"{text}\n\nIf useful, I can share a short example for your workflow."
 
-    return {
-        "rewritten_text": text.strip(),
-        "rewrite_reasons": reasons,
-        "intent_used": resolved_intent,
-    }
+    return text.strip()
