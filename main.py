@@ -26,6 +26,7 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 SITE_URL = os.getenv("INBOXGUARD_SITE_URL", "https://inboxguard.me")
 ADMIN_TOKEN = os.getenv("INBOXGUARD_ADMIN_TOKEN", "")
+GOOGLE_VERIFICATION_FILE = "googleab4b33a28d8dfb88.html"
 LONG_TAIL_PAGES = [
     {
         "slug": "fix-godaddy-spam-issues",
@@ -96,6 +97,14 @@ def health() -> dict:
 @app.get("/favicon.ico")
 def favicon_ico():
     return FileResponse(STATIC_DIR / "favicon-48.png", media_type="image/png")
+
+
+@app.get(f"/{GOOGLE_VERIFICATION_FILE}")
+def google_site_verification():
+    target = BASE_DIR / GOOGLE_VERIFICATION_FILE
+    if not target.exists():
+        raise HTTPException(status_code=404, detail="Verification file not found")
+    return FileResponse(target, media_type="text/html")
 
 
 @app.get("/", response_class=HTMLResponse)
