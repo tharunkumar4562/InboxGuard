@@ -492,13 +492,17 @@ async function showFixTransformation() {
         if (workflowTitleNode) {
             workflowTitleNode.textContent = rewriteOutcome === "improved"
                 ? "Safer version generated"
-                : "Best safer version generated";
+                : rewriteOutcome === "failed_fix"
+                    ? "Partial fix generated"
+                    : "Best safer version generated";
         }
 
         if (improvementEstimateNode) {
             const delta = Number(data.score_delta || 0);
             if (rewriteOutcome === "improved") {
                 improvementEstimateNode.textContent = `Risk shift: ${data.from_risk_band} -> ${data.to_risk_band} | Score delta: ${delta >= 0 ? "+" : ""}${delta}`;
+            } else if (rewriteOutcome === "failed_fix") {
+                improvementEstimateNode.textContent = "Could not safely remove all pressure signals without changing core intent. Use this draft as a base and refine further.";
             } else {
                 improvementEstimateNode.textContent = "No major risk shift detected. We still simplified structure to reduce bulk-style triggers.";
             }

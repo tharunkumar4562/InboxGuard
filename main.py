@@ -1,7 +1,9 @@
 from datetime import date
+from difflib import SequenceMatcher
 from pathlib import Path
 import logging
 import os
+import re
 
 from fastapi import FastAPI, Form, Request, HTTPException
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, Response, JSONResponse, FileResponse
@@ -96,7 +98,7 @@ def health() -> dict:
 
 @app.get("/favicon.ico")
 def favicon_ico():
-    return FileResponse(STATIC_DIR / "favicon.svg", media_type="image/svg+xml")
+    return FileResponse(STATIC_DIR / "favicon-48.png", media_type="image/png")
 
 
 @app.get(f"/{GOOGLE_VERIFICATION_FILE}")
@@ -332,6 +334,22 @@ def _rewrite_limitations(mode: str, score_delta: int, from_band: str, to_band: s
     return notes[:3]
 
 
+def _similarity_ratio(a: str, b: str) -> float:
+    return SequenceMatcher(None, a or "", b or "").ratio()
+
+
+def _contains_risky_tokens(text: str) -> bool:
+    low = (text or "").lower()
+    patterns = [
+        r"\blast\s+chance\b",
+        r"\bregister\s+now\b",
+        r"\bapply\s+now\b",
+        r"\bonly\s+\d+\s*(day|days|hour|hours|left)\b",
+        r"\blimited\s+time\b",
+    ]
+    return any(re.search(pattern, low) for pattern in patterns)
+
+
 @app.post("/rewrite")
 def rewrite_email(
     raw_email: str = Form(""),
@@ -367,7 +385,13 @@ def rewrite_email(
     email_intent = str(before_summary.get("email_type", "cold outreach"))
 
     before_score = int(before_summary.get("final_score", before_summary.get("score", 0)))
-    rewritten = rewrite_email_text(original, issue_titles, intent_type=email_intent, rewrite_style=style)
+    style_variants = {
+        "safe": rewrite_email_text(original, issue_titles, intent_type=email_intent, rewrite_style="safe"),
+        "balanced": rewrite_email_text(original, issue_titles, intent_type=email_intent, rewrite_style="balanced"),
+        "aggressive": rewrite_email_text(original, issue_titles, intent_type=email_intent, rewrite_style="aggressive"),
+    }
+
+    rewritten = style_variants.get(style, "")
     if len(rewritten.strip()) < 20:
         rewritten = original
 
@@ -381,6 +405,15 @@ def rewrite_email(
     to_band = str(after_summary.get("risk_band", "Needs Review"))
 
     rewrite_outcome = _rewrite_outcome(style, from_band, to_band, score_delta)
+    if _contains_risky_tokens(rewritten):
+        rewrite_outcome = "failed_fix"
+
+    other_styles = [name for name in ("safe", "balanced", "aggressive") if name != style]
+    collapse_detected = any(
+        _similarity_ratio(rewritten, style_variants.get(name, "")) > 0.82 for name in other_styles
+    )
+    if collapse_detected and rewrite_outcome != "failed_fix":
+        rewrite_outcome = "neutral"
 
     logger.info(
         "Rewrite mode=%s from_band=%s to_band=%s score_delta=%s",
@@ -406,6 +439,14 @@ def rewrite_email(
     rewrite_changes.insert(0, f"Mode applied: {style.title()}.")
     if rewrite_outcome == "neutral":
         rewrite_changes.insert(1, "No major risk shift detected, but bulk-style patterns were still reduced.")
+    elif rewrite_outcome == "failed_fix":
+        rewrite_changes.insert(1, "Could not safely remove all risky pressure signals without changing message intent.")
+
+    limitations = _rewrite_limitations(mode, score_delta, from_band, to_band)
+    if collapse_detected:
+        limitations.insert(0, "Rewrite styles were too similar for this draft; selected mode may need manual refinement.")
+    if rewrite_outcome == "failed_fix":
+        limitations.insert(0, "Risky urgency/CTA tokens still remain in the rewritten output.")
 
     return {
         "ok": True,
@@ -418,7 +459,7 @@ def rewrite_email(
         "to_score": after_score,
         "score_delta": score_delta,
         "rewrite_outcome": rewrite_outcome,
-        "rewrite_limitations": _rewrite_limitations(mode, score_delta, from_band, to_band),
+        "rewrite_limitations": limitations[:4],
         "rewrite_changes": rewrite_changes,
         "rewrite_trust_note": "This version removes common bulk-style patterns flagged by Gmail and Outlook filters.",
         "learning_profile": get_learning_profile(),
