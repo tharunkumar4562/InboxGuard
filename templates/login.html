@@ -38,8 +38,8 @@
       </div>
 
       <section class="rounded-3xl border border-slate-700 bg-slate-900/80 p-6 shadow-2xl">
-        <h1 id="access-title" class="text-3xl font-bold">Get Access</h1>
-        <p id="access-subtitle" class="mt-3 text-slate-300">Enter your email to unlock the full report instantly.</p>
+        <h1 class="text-3xl font-bold">Get Access</h1>
+        <p class="mt-3 text-slate-300">Enter your email to unlock the full report instantly.</p>
 
         <form id="access-form" class="mt-6 space-y-4" action="mailto:inboxguard.beta@gmail.com" method="post" enctype="text/plain">
           <div>
@@ -48,9 +48,6 @@
           </div>
           <button type="submit" class="w-full rounded-2xl bg-blue-600 px-6 py-3 text-base font-bold text-white shadow-lg shadow-blue-900/40 transition hover:bg-blue-700">
             Unlock Full Report
-          </button>
-          <button id="continue-btn" type="button" class="w-full rounded-2xl border border-slate-700 bg-slate-950/70 px-6 py-3 text-base font-bold text-slate-100 transition hover:border-blue-500">
-            Continue to InboxGuard
           </button>
           <p class="text-center text-xs text-slate-400">Need urgent report access? Use WhatsApp unlock on the scan page.</p>
         </form>
@@ -61,31 +58,6 @@
       (function () {
         const form = document.getElementById("access-form");
         const emailInput = document.getElementById("email");
-        const title = document.getElementById("access-title");
-        const subtitle = document.getElementById("access-subtitle");
-        const continueBtn = document.getElementById("continue-btn");
-        const params = new URLSearchParams(window.location.search);
-        const mode = (params.get("mode") || "signin").toLowerCase();
-        const next = params.get("next") || "/";
-
-        if (title && subtitle) {
-          if (mode === "create") {
-            title.textContent = "Create Account";
-            subtitle.textContent = "Create your access profile, then continue where you left off.";
-          } else {
-            title.textContent = "Sign In";
-            subtitle.textContent = "Sign in, then continue fixing your draft without losing progress.";
-          }
-        }
-
-        if (continueBtn) {
-          continueBtn.textContent = mode === "create" ? "Create and Continue" : "Sign In and Continue";
-          continueBtn.addEventListener("click", function () {
-            localStorage.setItem("ig_auth_ok", "1");
-            window.location.href = next + "?auth=ok";
-          });
-        }
-
         if (!form || !emailInput) {
           return;
         }
@@ -105,9 +77,12 @@
               // Keep UX resilient even if tracking endpoint fails.
             })
             .finally(function () {
-              const subject = encodeURIComponent("InboxGuard Access Request");
-              const body = encodeURIComponent("Email: " + email);
-              window.location.href = "mailto:inboxguard.beta@gmail.com?subject=" + subject + "&body=" + body;
+              try {
+                localStorage.setItem("ig_auth_ok", "1");
+              } catch (error) {
+                // Ignore storage errors and continue redirect.
+              }
+              window.location.href = "/?resume=1";
             });
         });
       })();

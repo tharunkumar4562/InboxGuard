@@ -73,11 +73,6 @@ let pendingAction = null;
 let isAuthenticated = localStorage.getItem("ig_auth_ok") === "1";
 let freeRunCount = Number(localStorage.getItem("ig_free_run_count") || "0");
 
-const RESUME_PENDING_KEY = "ig_resume_pending_action";
-const RESUME_RAW_KEY = "ig_resume_raw_email";
-const RESUME_DOMAIN_KEY = "ig_resume_domain";
-const RESUME_MODE_KEY = "ig_resume_analysis_mode";
-
 const errorBanner = document.createElement("div");
 errorBanner.id = "error-banner";
 errorBanner.className = "hidden";
@@ -133,48 +128,59 @@ function runPendingAction() {
     pendingAction = null;
 }
 
-function storeResumeContext(action) {
-    if (!rawEmailInput) {
+function stashPendingContext(actionName) {
+    localStorage.setItem("ig_pending_action", actionName || "analyze");
+    localStorage.setItem("ig_pending_draft", rawEmailInput ? rawEmailInput.value : "");
+    localStorage.setItem("ig_pending_domain", domainInput ? domainInput.value : "");
+    localStorage.setItem("ig_pending_analysis_mode", analysisModeInput ? analysisModeInput.value : "content");
+    localStorage.setItem("ig_pending_rewrite_style", rewriteStyleInput ? rewriteStyleInput.value : "balanced");
+}
+
+function restorePendingContext() {
+    if (rawEmailInput && !rawEmailInput.value) {
+        rawEmailInput.value = localStorage.getItem("ig_pending_draft") || "";
+    }
+    if (domainInput && !domainInput.value) {
+        domainInput.value = localStorage.getItem("ig_pending_domain") || "";
+    }
+    if (analysisModeInput) {
+        const mode = localStorage.getItem("ig_pending_analysis_mode");
+        if (mode) {
+            analysisModeInput.value = mode;
+        }
+    }
+    if (rewriteStyleInput) {
+        const style = localStorage.getItem("ig_pending_rewrite_style");
+        if (style) {
+            rewriteStyleInput.value = style;
+        }
+    }
+}
+
+function clearPendingContext() {
+    localStorage.removeItem("ig_pending_action");
+    localStorage.removeItem("ig_pending_draft");
+    localStorage.removeItem("ig_pending_domain");
+    localStorage.removeItem("ig_pending_analysis_mode");
+    localStorage.removeItem("ig_pending_rewrite_style");
+}
+
+function resumeAfterAccessIfNeeded() {
+    const params = new URLSearchParams(window.location.search);
+    const shouldResume = params.get("resume") === "1";
+    if (!shouldResume || !isAuthenticated) {
         return;
     }
-    sessionStorage.setItem(RESUME_PENDING_KEY, action || "");
-    sessionStorage.setItem(RESUME_RAW_KEY, rawEmailInput.value || "");
-    sessionStorage.setItem(RESUME_DOMAIN_KEY, domainInput ? domainInput.value || "" : "");
-    sessionStorage.setItem(RESUME_MODE_KEY, analysisModeInput ? analysisModeInput.value || "content" : "content");
-}
 
-function restoreResumeContext() {
-    const raw = sessionStorage.getItem(RESUME_RAW_KEY);
-    const domain = sessionStorage.getItem(RESUME_DOMAIN_KEY);
-    const mode = sessionStorage.getItem(RESUME_MODE_KEY);
-    const pending = sessionStorage.getItem(RESUME_PENDING_KEY);
-
-    if (rawEmailInput && raw !== null) {
-        rawEmailInput.value = raw;
+    restorePendingContext();
+    const action = localStorage.getItem("ig_pending_action");
+    if (action) {
+        pendingAction = action;
+        runPendingAction();
     }
-    if (domainInput && domain !== null) {
-        domainInput.value = domain;
-    }
-    if (analysisModeInput && mode) {
-        analysisModeInput.value = mode;
-    }
-    if (pending) {
-        pendingAction = pending;
-    }
-}
-
-function clearResumeContext() {
-    sessionStorage.removeItem(RESUME_PENDING_KEY);
-    sessionStorage.removeItem(RESUME_RAW_KEY);
-    sessionStorage.removeItem(RESUME_DOMAIN_KEY);
-    sessionStorage.removeItem(RESUME_MODE_KEY);
-}
-
-function redirectToAccess(mode) {
-    const safeMode = mode === "create" ? "create" : "signin";
-    storeResumeContext(pendingAction || "analyze");
-    const next = encodeURIComponent("/");
-    window.location.href = `/access?mode=${safeMode}&next=${next}`;
+    clearPendingContext();
+    const cleanUrl = window.location.pathname + window.location.hash;
+    window.history.replaceState({}, document.title, cleanUrl);
 }
 
 function onAuthSuccess(source) {
@@ -193,11 +199,15 @@ function onAuthSuccess(source) {
 
 function handleAuthAction(action) {
     if (action === "signin") {
-        redirectToAccess("signin");
+        stashPendingContext(pendingAction || "analyze");
+        hideAuthModal();
+        window.location.href = "/access?mode=signin&resume=1";
         return;
     }
     if (action === "create") {
-        redirectToAccess("create");
+        stashPendingContext(pendingAction || "analyze");
+        hideAuthModal();
+        window.location.href = "/access?mode=create&resume=1";
         return;
     }
     hideAuthModal();
@@ -912,26 +922,6 @@ if (form) {
     });
 }
 
-(function resumeAfterAccessReturn() {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("auth") !== "ok") {
-        return;
-    }
-
-    isAuthenticated = true;
-    localStorage.setItem("ig_auth_ok", "1");
-    restoreResumeContext();
-
-    setTimeout(() => {
-        if (pendingAction) {
-            runPendingAction();
-        }
-        clearResumeContext();
-
-        const cleanUrl = window.location.pathname;
-        window.history.replaceState({}, "", cleanUrl);
-    }, 0);
-})();
-
 setIdleState();
 activateTab("dashboard");
+resumeAfterAccessIfNeeded();
