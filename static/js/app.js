@@ -73,6 +73,11 @@ let pendingAction = null;
 let isAuthenticated = localStorage.getItem("ig_auth_ok") === "1";
 let freeRunCount = Number(localStorage.getItem("ig_free_run_count") || "0");
 
+const RESUME_PENDING_KEY = "ig_resume_pending_action";
+const RESUME_RAW_KEY = "ig_resume_raw_email";
+const RESUME_DOMAIN_KEY = "ig_resume_domain";
+const RESUME_MODE_KEY = "ig_resume_analysis_mode";
+
 const errorBanner = document.createElement("div");
 errorBanner.id = "error-banner";
 errorBanner.className = "hidden";
@@ -128,6 +133,50 @@ function runPendingAction() {
     pendingAction = null;
 }
 
+function storeResumeContext(action) {
+    if (!rawEmailInput) {
+        return;
+    }
+    sessionStorage.setItem(RESUME_PENDING_KEY, action || "");
+    sessionStorage.setItem(RESUME_RAW_KEY, rawEmailInput.value || "");
+    sessionStorage.setItem(RESUME_DOMAIN_KEY, domainInput ? domainInput.value || "" : "");
+    sessionStorage.setItem(RESUME_MODE_KEY, analysisModeInput ? analysisModeInput.value || "content" : "content");
+}
+
+function restoreResumeContext() {
+    const raw = sessionStorage.getItem(RESUME_RAW_KEY);
+    const domain = sessionStorage.getItem(RESUME_DOMAIN_KEY);
+    const mode = sessionStorage.getItem(RESUME_MODE_KEY);
+    const pending = sessionStorage.getItem(RESUME_PENDING_KEY);
+
+    if (rawEmailInput && raw !== null) {
+        rawEmailInput.value = raw;
+    }
+    if (domainInput && domain !== null) {
+        domainInput.value = domain;
+    }
+    if (analysisModeInput && mode) {
+        analysisModeInput.value = mode;
+    }
+    if (pending) {
+        pendingAction = pending;
+    }
+}
+
+function clearResumeContext() {
+    sessionStorage.removeItem(RESUME_PENDING_KEY);
+    sessionStorage.removeItem(RESUME_RAW_KEY);
+    sessionStorage.removeItem(RESUME_DOMAIN_KEY);
+    sessionStorage.removeItem(RESUME_MODE_KEY);
+}
+
+function redirectToAccess(mode) {
+    const safeMode = mode === "create" ? "create" : "signin";
+    storeResumeContext(pendingAction || "analyze");
+    const next = encodeURIComponent("/");
+    window.location.href = `/access?mode=${safeMode}&next=${next}`;
+}
+
 function onAuthSuccess(source) {
     isAuthenticated = true;
     localStorage.setItem("ig_auth_ok", "1");
@@ -144,13 +193,11 @@ function onAuthSuccess(source) {
 
 function handleAuthAction(action) {
     if (action === "signin") {
-        onAuthSuccess("signin");
-        showError("Signed in. Continuing your action...");
+        redirectToAccess("signin");
         return;
     }
     if (action === "create") {
-        onAuthSuccess("create_account");
-        showError("Account created. Continuing your action...");
+        redirectToAccess("create");
         return;
     }
     hideAuthModal();
@@ -864,6 +911,27 @@ if (form) {
         runPendingAction();
     });
 }
+
+(function resumeAfterAccessReturn() {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("auth") !== "ok") {
+        return;
+    }
+
+    isAuthenticated = true;
+    localStorage.setItem("ig_auth_ok", "1");
+    restoreResumeContext();
+
+    setTimeout(() => {
+        if (pendingAction) {
+            runPendingAction();
+        }
+        clearResumeContext();
+
+        const cleanUrl = window.location.pathname;
+        window.history.replaceState({}, "", cleanUrl);
+    }, 0);
+})();
 
 setIdleState();
 activateTab("dashboard");
