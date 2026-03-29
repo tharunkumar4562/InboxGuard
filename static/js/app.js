@@ -5,6 +5,12 @@ const scanPanel = document.querySelector(".scan-panel");
 const tabFeedbackNode = document.getElementById("tab-feedback");
 const dashboardTab = document.getElementById("tab-dashboard");
 const threatScanTab = document.getElementById("tab-threat-scan");
+const startButton = document.getElementById("start-btn");
+
+const authModal = document.getElementById("auth-modal");
+const authSignInButton = document.getElementById("auth-signin");
+const authCreateButton = document.getElementById("auth-create");
+const authCloseButton = document.getElementById("auth-close");
 
 const rawEmailInput = document.getElementById("raw-email");
 const domainInput = document.getElementById("domain");
@@ -63,6 +69,9 @@ let latestFindings = [];
 let latestRewriteContext = null;
 let latestLearningProfile = null;
 let hasScanResult = false;
+let pendingAction = null;
+let isAuthenticated = localStorage.getItem("ig_auth_ok") === "1";
+let freeRunCount = Number(localStorage.getItem("ig_free_run_count") || "0");
 
 const errorBanner = document.createElement("div");
 errorBanner.id = "error-banner";
@@ -83,6 +92,54 @@ function setTabFeedback(message) {
     if (tabFeedbackNode) {
         tabFeedbackNode.textContent = message;
     }
+}
+
+function showAuthModal() {
+    if (!authModal) {
+        return;
+    }
+    authModal.classList.remove("hidden");
+}
+
+function hideAuthModal() {
+    if (!authModal) {
+        return;
+    }
+    authModal.classList.add("hidden");
+}
+
+function needsAuthGate(action) {
+    if (isAuthenticated) {
+        return false;
+    }
+    // Option A: allow first run without auth, gate subsequent actions.
+    if (action === "analyze" && freeRunCount < 1) {
+        return false;
+    }
+    return true;
+}
+
+function runPendingAction() {
+    if (pendingAction === "analyze") {
+        runAnalyze();
+    } else if (pendingAction === "fix") {
+        showFixTransformation();
+    }
+    pendingAction = null;
+}
+
+function onAuthSuccess(source) {
+    isAuthenticated = true;
+    localStorage.setItem("ig_auth_ok", "1");
+    hideAuthModal();
+
+    const payload = new FormData();
+    payload.set("event", "access_request");
+    payload.set("target", source || "auth_modal");
+    payload.set("mode", "resume_pending_action");
+    fetch("/track", { method: "POST", body: payload }).catch(() => null);
+
+    runPendingAction();
 }
 
 function activateTab(tab) {
@@ -569,6 +626,83 @@ async function showFixTransformation() {
     fixNowButton.textContent = "Fix My Email";
 }
 
+async function runAnalyze() {
+    const rawText = rawEmailInput ? rawEmailInput.value.trim() : "";
+    const domainText = domainInput ? domainInput.value.trim() : "";
+    const mode = analysisModeInput ? analysisModeInput.value : "content";
+
+    if (rawText.length < 20) {
+        showError("Paste the full email draft before scanning.");
+        return;
+    }
+
+    setLoadingState();
+    const loadingTicker = startRealtimeScanSteps();
+
+    try {
+        const payload = new FormData();
+        payload.set("raw_email", rawText);
+        if (domainText) {
+            payload.set("domain", domainText);
+        }
+        payload.set("analysis_mode", mode);
+
+        const response = await fetch("/analyze", {
+            method: "POST",
+            body: payload,
+        });
+
+        if (!response.ok) {
+            throw new Error("Unable to complete risk scan. Try again.");
+        }
+
+        const data = await response.json();
+        if (loadingTicker) {
+            clearInterval(loadingTicker);
+        }
+        const summary = data.summary || {};
+        const signals = data.signals || {};
+        const findings = data.partial_findings || summary.findings || [];
+        latestLearningProfile = data.learning_profile || latestLearningProfile;
+        hasScanResult = true;
+
+        latestSummary = summary;
+        latestFindings = findings;
+
+        renderStatus(summary, signals, findings);
+        renderBiggestRisk(summary, findings);
+        renderConsequences(summary);
+        renderHurting(findings);
+        renderFixes(summary);
+        renderBreakdown(summary);
+
+        if (workflowStateNode) {
+            workflowStateNode.textContent = "Step 1: Scan complete";
+        }
+        if (workflowTitleNode) {
+            workflowTitleNode.textContent = "Step 2: Fix required";
+        }
+        if (fixOutput) {
+            fixOutput.classList.add("hidden");
+        }
+
+        setResultState();
+        if (resultSection) {
+            resultSection.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+        activateTab("dashboard");
+
+        freeRunCount += 1;
+        localStorage.setItem("ig_free_run_count", String(freeRunCount));
+    } catch (error) {
+        if (loadingTicker) {
+            clearInterval(loadingTicker);
+        }
+        showError(error && error.message ? error.message : "Scan failed.");
+        setIdleState();
+    }
+}
+
 function useFixedVersion() {
     if (!afterEmailNode || !rawEmailInput) {
         return;
@@ -629,8 +763,25 @@ if (dashboardTab) {
 if (threatScanTab) {
     threatScanTab.addEventListener("click", () => activateTab("threat-scan"));
 }
+if (startButton) {
+    startButton.addEventListener("click", () => {
+        pendingAction = "analyze";
+        if (needsAuthGate("analyze")) {
+            showAuthModal();
+            return;
+        }
+        runPendingAction();
+    });
+}
 if (fixNowButton) {
-    fixNowButton.addEventListener("click", showFixTransformation);
+    fixNowButton.addEventListener("click", () => {
+        pendingAction = "fix";
+        if (needsAuthGate("fix")) {
+            showAuthModal();
+            return;
+        }
+        runPendingAction();
+    });
 }
 if (useFixedButton) {
     useFixedButton.addEventListener("click", useFixedVersion);
@@ -650,82 +801,25 @@ if (feedbackSpamButton) {
 if (feedbackUnsureButton) {
     feedbackUnsureButton.addEventListener("click", () => sendFeedback("not_sure"));
 }
+if (authSignInButton) {
+    authSignInButton.addEventListener("click", () => onAuthSuccess("signin"));
+}
+if (authCreateButton) {
+    authCreateButton.addEventListener("click", () => onAuthSuccess("create_account"));
+}
+if (authCloseButton) {
+    authCloseButton.addEventListener("click", hideAuthModal);
+}
 
 if (form) {
     form.addEventListener("submit", async (event) => {
         event.preventDefault();
-
-        const rawText = rawEmailInput ? rawEmailInput.value.trim() : "";
-        const domainText = domainInput ? domainInput.value.trim() : "";
-        const mode = analysisModeInput ? analysisModeInput.value : "content";
-
-        if (rawText.length < 20) {
-            showError("Paste the full email draft before scanning.");
+        pendingAction = "analyze";
+        if (needsAuthGate("analyze")) {
+            showAuthModal();
             return;
         }
-
-        setLoadingState();
-        const loadingTicker = startRealtimeScanSteps();
-
-        try {
-            const payload = new FormData();
-            payload.set("raw_email", rawText);
-            if (domainText) {
-                payload.set("domain", domainText);
-            }
-            payload.set("analysis_mode", mode);
-
-            const response = await fetch("/analyze", {
-                method: "POST",
-                body: payload,
-            });
-
-            if (!response.ok) {
-                throw new Error("Unable to complete risk scan. Try again.");
-            }
-
-            const data = await response.json();
-            if (loadingTicker) {
-                clearInterval(loadingTicker);
-            }
-            const summary = data.summary || {};
-            const signals = data.signals || {};
-            const findings = data.partial_findings || summary.findings || [];
-            latestLearningProfile = data.learning_profile || latestLearningProfile;
-            hasScanResult = true;
-
-            latestSummary = summary;
-            latestFindings = findings;
-
-            renderStatus(summary, signals, findings);
-            renderBiggestRisk(summary, findings);
-            renderConsequences(summary);
-            renderHurting(findings);
-            renderFixes(summary);
-            renderBreakdown(summary);
-
-            if (workflowStateNode) {
-                workflowStateNode.textContent = "Step 1: Scan complete";
-            }
-            if (workflowTitleNode) {
-                workflowTitleNode.textContent = "Step 2: Fix required";
-            }
-            if (fixOutput) {
-                fixOutput.classList.add("hidden");
-            }
-
-            setResultState();
-            if (resultSection) {
-                resultSection.scrollIntoView({ behavior: "smooth", block: "start" });
-            }
-            activateTab("dashboard");
-        } catch (error) {
-            if (loadingTicker) {
-                clearInterval(loadingTicker);
-            }
-            showError(error && error.message ? error.message : "Scan failed.");
-            setIdleState();
-        }
+        runPendingAction();
     });
 }
 
