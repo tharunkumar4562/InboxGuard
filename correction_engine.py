@@ -256,8 +256,45 @@ def _extract_subject_and_body(original_text: str) -> Dict[str, str]:
 
     # Preserve line structure for safer intent extraction and de-duplication.
     body_lines = [line.rstrip() for line in body.splitlines()]
+
+    # Infer subject when users paste plain text without explicit "Subject:" prefix.
+    if not subject:
+        non_empty = [line.strip() for line in body_lines if line.strip()]
+        if len(non_empty) >= 2:
+            first_line = non_empty[0]
+            second_line = non_empty[1].lower()
+            looks_like_subject = (
+                len(first_line.split()) >= 3
+                and len(first_line) <= 95
+                and not bool(re.match(r"^(hi|hello|dear|hey)\b", first_line.lower()))
+            )
+            second_is_greeting = bool(re.match(r"^(hi|hello|dear|hey)\b", second_line))
+            if looks_like_subject and second_is_greeting:
+                subject = first_line
+                removed = False
+                filtered_lines = []
+                for line in body_lines:
+                    if not removed and line.strip() == first_line:
+                        removed = True
+                        continue
+                    filtered_lines.append(line)
+                body_lines = filtered_lines
+
     body = "\n".join(body_lines).strip()
     return {"subject": subject, "body": body}
+
+
+def _sanitize_subject_line(subject: str) -> str:
+    clean = _normalize_line(subject)
+    if not clean:
+        return ""
+    clean = re.sub(r"(?i)\blast\s+chance\b", "", clean)
+    clean = re.sub(r"(?i)\b(register|apply)\s+now\b", "", clean)
+    clean = re.sub(r"(?i)\bonly\s+\d+\s*(day|days|hour|hours|left)\b", "", clean)
+    clean = re.sub(r"\s{2,}", " ", clean).strip(" -:,")
+    if len(clean) > 90:
+        clean = clean[:90].rsplit(" ", 1)[0].strip()
+    return clean
 
 
 def _normalize_line(line: str) -> str:
@@ -708,4 +745,9 @@ def rewrite_email_text(
                 f"Hey {{{{first_name}}}},\n\nQuick question, is {anchor} relevant for you right now?\nWe found a cleaner version of this message that removes urgency and bulk signals.\n\nHappy to share details if useful."
             )
 
-    return text.strip()
+    final_text = text.strip()
+    sanitized_subject = _sanitize_subject_line(subject)
+    if sanitized_subject:
+        final_text = f"Subject: {sanitized_subject}\n\n{final_text}"
+
+    return final_text
