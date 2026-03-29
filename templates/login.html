@@ -38,51 +38,102 @@
       </div>
 
       <section class="rounded-3xl border border-slate-700 bg-slate-900/80 p-6 shadow-2xl">
-        <h1 class="text-3xl font-bold">Get Access</h1>
-        <p class="mt-3 text-slate-300">Enter your email to unlock the full report instantly.</p>
+        <h1 class="text-3xl font-bold">Continue Your Scans</h1>
+        <p class="mt-3 text-slate-300">Use a real provider to authenticate and continue without losing your draft.</p>
 
-        <form id="access-form" class="mt-6 space-y-4" action="mailto:inboxguard.beta@gmail.com" method="post" enctype="text/plain">
-          <div>
-            <label for="email" class="mb-2 block text-sm text-slate-300">Work email</label>
-            <input id="email" name="email" type="email" required class="w-full rounded-2xl border border-slate-700 bg-slate-950/70 p-3 text-sm text-slate-100 outline-none transition focus:border-blue-500" placeholder="you@company.com" />
+        <div class="mt-6 space-y-4">
+          <a id="google-auth" href="/auth/google/login?next=/?resume=1" class="w-full inline-flex items-center justify-center rounded-2xl bg-blue-600 px-6 py-3 text-base font-bold text-white shadow-lg shadow-blue-900/40 transition hover:bg-blue-700 no-underline">
+            Continue with Google
+          </a>
+
+          <div class="rounded-2xl border border-slate-700 bg-slate-950/50 p-4">
+            <p class="mb-3 text-sm text-slate-300">Or continue with Email OTP</p>
+            <form id="otp-request-form" class="space-y-3">
+              <div>
+                <label for="email" class="mb-2 block text-sm text-slate-300">Email</label>
+                <input id="email" name="email" type="email" required class="w-full rounded-2xl border border-slate-700 bg-slate-950/70 p-3 text-sm text-slate-100 outline-none transition focus:border-blue-500" placeholder="you@company.com" />
+              </div>
+              <button type="submit" class="w-full rounded-2xl bg-slate-700 px-6 py-3 text-base font-semibold text-white transition hover:bg-slate-600">
+                Send OTP
+              </button>
+            </form>
+
+            <form id="otp-verify-form" class="space-y-3 mt-4 hidden">
+              <div>
+                <label for="otp" class="mb-2 block text-sm text-slate-300">Enter 6-digit OTP</label>
+                <input id="otp" name="otp" type="text" inputmode="numeric" maxlength="6" required class="w-full rounded-2xl border border-slate-700 bg-slate-950/70 p-3 text-sm text-slate-100 outline-none transition focus:border-blue-500" placeholder="123456" />
+              </div>
+              <button type="submit" class="w-full rounded-2xl bg-emerald-600 px-6 py-3 text-base font-semibold text-white transition hover:bg-emerald-500">
+                Verify OTP and Continue
+              </button>
+            </form>
+            <p id="auth-msg" class="mt-3 text-xs text-slate-400"></p>
           </div>
-          <button type="submit" class="w-full rounded-2xl bg-blue-600 px-6 py-3 text-base font-bold text-white shadow-lg shadow-blue-900/40 transition hover:bg-blue-700">
-            Unlock Full Report
-          </button>
-          <p class="text-center text-xs text-slate-400">Need urgent report access? Use WhatsApp unlock on the scan page.</p>
-        </form>
+        </div>
       </section>
     </main>
 
     <script>
       (function () {
-        const form = document.getElementById("access-form");
+        const requestForm = document.getElementById("otp-request-form");
+        const verifyForm = document.getElementById("otp-verify-form");
         const emailInput = document.getElementById("email");
-        if (!form || !emailInput) {
+        const otpInput = document.getElementById("otp");
+        const msg = document.getElementById("auth-msg");
+
+        if (!requestForm || !verifyForm || !emailInput || !otpInput || !msg) {
           return;
         }
 
-        form.addEventListener("submit", function (event) {
+        const params = new URLSearchParams(window.location.search);
+        const resume = params.get("resume") === "1" ? "1" : "0";
+
+        requestForm.addEventListener("submit", function (event) {
           event.preventDefault();
           const email = (emailInput.value || "").trim();
           const payload = new FormData();
           payload.set("email", email);
 
-          fetch("/request-access", {
+          fetch("/auth/email/request-otp", {
             method: "POST",
             body: payload,
             keepalive: true,
           })
-            .catch(function () {
-              // Keep UX resilient even if tracking endpoint fails.
-            })
-            .finally(function () {
-              try {
-                localStorage.setItem("ig_auth_ok", "1");
-              } catch (error) {
-                // Ignore storage errors and continue redirect.
+            .then(async function (resp) {
+              if (!resp.ok) {
+                const payload = await resp.json().catch(function () { return {}; });
+                throw new Error(payload.detail || "Could not send OTP");
               }
-              window.location.href = "/?resume=1";
+              verifyForm.classList.remove("hidden");
+              msg.textContent = "OTP sent. Check your email and enter the code.";
+            })
+            .catch(function (error) {
+              msg.textContent = error && error.message ? error.message : "Could not send OTP.";
+            });
+        });
+
+        verifyForm.addEventListener("submit", function (event) {
+          event.preventDefault();
+          const email = (emailInput.value || "").trim();
+          const otp = (otpInput.value || "").trim();
+          const payload = new FormData();
+          payload.set("email", email);
+          payload.set("otp", otp);
+
+          fetch("/auth/email/verify-otp", {
+            method: "POST",
+            body: payload,
+            keepalive: true,
+          })
+            .then(async function (resp) {
+              const body = await resp.json().catch(function () { return {}; });
+              if (!resp.ok) {
+                throw new Error(body.detail || "OTP verification failed");
+              }
+              window.location.href = resume === "1" ? "/?resume=1" : (body.redirect || "/");
+            })
+            .catch(function (error) {
+              msg.textContent = error && error.message ? error.message : "OTP verification failed.";
             });
         });
       })();

@@ -1,15 +1,22 @@
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from difflib import SequenceMatcher
 from pathlib import Path
 import logging
 import os
 import re
+import sqlite3
+import hashlib
+import smtplib
+from email.message import EmailMessage
+from urllib.parse import quote_plus
 
 from fastapi import FastAPI, Form, Request, HTTPException
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, Response, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.middleware.sessions import SessionMiddleware
 from jinja2 import TemplateNotFound, TemplateError
+from authlib.integrations.starlette_client import OAuth
 
 from analyzer import analyze_email
 from analytics import get_dashboard_data, track_event
@@ -28,6 +35,16 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 SITE_URL = os.getenv("INBOXGUARD_SITE_URL", "https://inboxguard.me")
 ADMIN_TOKEN = os.getenv("INBOXGUARD_ADMIN_TOKEN", "")
+SESSION_SECRET = os.getenv("INBOXGUARD_SESSION_SECRET", "change-this-session-secret")
+AUTH_DB_FILE = BASE_DIR / "data" / "auth.db"
+OTP_TTL_MINUTES = int(os.getenv("INBOXGUARD_OTP_TTL_MINUTES", "10"))
+SMTP_HOST = os.getenv("INBOXGUARD_SMTP_HOST", "")
+SMTP_PORT = int(os.getenv("INBOXGUARD_SMTP_PORT", "587"))
+SMTP_USERNAME = os.getenv("INBOXGUARD_SMTP_USERNAME", "")
+SMTP_PASSWORD = os.getenv("INBOXGUARD_SMTP_PASSWORD", "")
+SMTP_FROM = os.getenv("INBOXGUARD_SMTP_FROM", "")
+GOOGLE_CLIENT_ID = os.getenv("INBOXGUARD_GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET = os.getenv("INBOXGUARD_GOOGLE_CLIENT_SECRET", "")
 GOOGLE_VERIFICATION_FILE = "googleab4b33a28d8dfb88.html"
 LONG_TAIL_PAGES = [
     {
@@ -50,6 +67,110 @@ LONG_TAIL_PAGES = [
     },
 ]
 LONG_TAIL_BY_SLUG = {item["slug"]: item for item in LONG_TAIL_PAGES}
+
+app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET, same_site="lax", https_only=True)
+
+oauth = OAuth()
+if GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET:
+    oauth.register(
+        name="google",
+        client_id=GOOGLE_CLIENT_ID,
+        client_secret=GOOGLE_CLIENT_SECRET,
+        server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
+        client_kwargs={"scope": "openid email profile"},
+    )
+
+
+def _auth_db_conn() -> sqlite3.Connection:
+    AUTH_DB_FILE.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(AUTH_DB_FILE))
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def _ensure_auth_db() -> None:
+    conn = _auth_db_conn()
+    try:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                email TEXT UNIQUE NOT NULL,
+                provider TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                last_login_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS otp_codes (
+                email TEXT PRIMARY KEY,
+                code_hash TEXT NOT NULL,
+                expires_at TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _hash_otp(email: str, otp: str) -> str:
+    material = f"{email.lower().strip()}:{otp}:{SESSION_SECRET}"
+    return hashlib.sha256(material.encode("utf-8")).hexdigest()
+
+
+def _upsert_user(email: str, provider: str) -> None:
+    clean_email = (email or "").strip().lower()
+    if not clean_email:
+        return
+    now = datetime.now(timezone.utc).isoformat()
+    conn = _auth_db_conn()
+    try:
+        existing = conn.execute("SELECT email FROM users WHERE email=?", (clean_email,)).fetchone()
+        if existing:
+            conn.execute("UPDATE users SET provider=?, last_login_at=? WHERE email=?", (provider, now, clean_email))
+        else:
+            conn.execute(
+                "INSERT INTO users(email, provider, created_at, last_login_at) VALUES (?, ?, ?, ?)",
+                (clean_email, provider, now, now),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _set_auth_session(request: Request, email: str, provider: str) -> None:
+    request.session["auth_email"] = (email or "").strip().lower()
+    request.session["auth_provider"] = provider
+    request.session["auth_at"] = datetime.now(timezone.utc).isoformat()
+
+
+def _send_otp_email(email: str, otp: str) -> None:
+    if not (SMTP_HOST and SMTP_USERNAME and SMTP_PASSWORD and SMTP_FROM):
+        raise HTTPException(status_code=503, detail="Email OTP provider is not configured")
+
+    message = EmailMessage()
+    message["Subject"] = "Your InboxGuard verification code"
+    message["From"] = SMTP_FROM
+    message["To"] = email
+    message.set_content(
+        "\n".join(
+            [
+                "Your InboxGuard OTP code:",
+                otp,
+                "",
+                f"This code expires in {OTP_TTL_MINUTES} minutes.",
+            ]
+        )
+    )
+
+    with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=20) as smtp:
+        smtp.starttls()
+        smtp.login(SMTP_USERNAME, SMTP_PASSWORD)
+        smtp.send_message(message)
 
 
 def render_template_safe(request: Request, template_name: str, context: dict, status_code: int = 200):
@@ -77,6 +198,7 @@ def render_template_safe(request: Request, template_name: str, context: dict, st
 @app.on_event("startup")
 def log_template_environment() -> None:
     try:
+        _ensure_auth_db()
         template_files = sorted([p.name for p in TEMPLATES_DIR.glob("*.html")]) if TEMPLATES_DIR.exists() else []
         logger.warning(
             "Startup paths base=%s templates=%s static=%s templates_exists=%s static_exists=%s template_files=%s",
@@ -139,8 +261,117 @@ def access_page(request: Request):
             "page_title": "Get Access | InboxGuard",
             "meta_description": "Enter your email to unlock your full InboxGuard remediation report instantly.",
             "canonical_url": f"{SITE_URL}/access",
+            "resume_mode": request.query_params.get("resume", "0"),
+            "auth_mode": request.query_params.get("mode", "signin"),
         },
     )
+
+
+@app.get("/auth/status")
+def auth_status(request: Request):
+    email = str(request.session.get("auth_email", "")).strip().lower()
+    provider = str(request.session.get("auth_provider", "")).strip().lower()
+    return {"authenticated": bool(email), "email": email, "provider": provider}
+
+
+@app.get("/auth/google/login")
+async def auth_google_login(request: Request, next: str = "/?resume=1"):
+    google_client = oauth.create_client("google")
+    if google_client is None:
+        raise HTTPException(status_code=503, detail="Google OAuth is not configured")
+
+    request.session["auth_next"] = next
+    redirect_uri = f"{SITE_URL}/auth/google/callback"
+    return await google_client.authorize_redirect(request, redirect_uri)
+
+
+@app.get("/auth/google/callback")
+async def auth_google_callback(request: Request):
+    google_client = oauth.create_client("google")
+    if google_client is None:
+        raise HTTPException(status_code=503, detail="Google OAuth is not configured")
+
+    token = await google_client.authorize_access_token(request)
+    user_info = token.get("userinfo")
+    if not user_info:
+        user_info = await google_client.userinfo(token=token)
+
+    email = str((user_info or {}).get("email", "")).strip().lower()
+    if not email:
+        raise HTTPException(status_code=400, detail="Google account email not available")
+
+    _upsert_user(email, "google")
+    _set_auth_session(request, email, "google")
+    next_url = str(request.session.pop("auth_next", "/?resume=1"))
+    return RedirectResponse(url=next_url, status_code=303)
+
+
+@app.post("/auth/email/request-otp")
+def auth_email_request_otp(email: str = Form("")):
+    clean_email = (email or "").strip().lower()
+    if not clean_email or "@" not in clean_email:
+        raise HTTPException(status_code=400, detail="Valid email is required")
+
+    otp = str(int.from_bytes(os.urandom(4), "big") % 900000 + 100000)
+    code_hash = _hash_otp(clean_email, otp)
+    created_at = datetime.now(timezone.utc)
+    expires_at = created_at + timedelta(minutes=OTP_TTL_MINUTES)
+
+    conn = _auth_db_conn()
+    try:
+        conn.execute(
+            """
+            INSERT INTO otp_codes(email, code_hash, expires_at, created_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(email) DO UPDATE SET code_hash=excluded.code_hash, expires_at=excluded.expires_at, created_at=excluded.created_at
+            """,
+            (clean_email, code_hash, expires_at.isoformat(), created_at.isoformat()),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    _send_otp_email(clean_email, otp)
+    return {"ok": True}
+
+
+@app.post("/auth/email/verify-otp")
+def auth_email_verify_otp(request: Request, email: str = Form(""), otp: str = Form("")):
+    clean_email = (email or "").strip().lower()
+    clean_otp = re.sub(r"\D", "", otp or "")
+    if not clean_email or len(clean_otp) != 6:
+        raise HTTPException(status_code=400, detail="Email and 6-digit OTP are required")
+
+    conn = _auth_db_conn()
+    try:
+        row = conn.execute("SELECT code_hash, expires_at FROM otp_codes WHERE email=?", (clean_email,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=400, detail="OTP not requested for this email")
+
+        expires_at = datetime.fromisoformat(str(row["expires_at"]))
+        if datetime.now(timezone.utc) > expires_at:
+            conn.execute("DELETE FROM otp_codes WHERE email=?", (clean_email,))
+            conn.commit()
+            raise HTTPException(status_code=400, detail="OTP expired, request a new code")
+
+        expected_hash = str(row["code_hash"])
+        if _hash_otp(clean_email, clean_otp) != expected_hash:
+            raise HTTPException(status_code=400, detail="Invalid OTP")
+
+        conn.execute("DELETE FROM otp_codes WHERE email=?", (clean_email,))
+        conn.commit()
+    finally:
+        conn.close()
+
+    _upsert_user(clean_email, "email_otp")
+    _set_auth_session(request, clean_email, "email_otp")
+    return {"ok": True, "redirect": "/?resume=1"}
+
+
+@app.post("/auth/logout")
+def auth_logout(request: Request):
+    request.session.clear()
+    return {"ok": True}
 
 
 @app.get("/p/{slug}", response_class=HTMLResponse)

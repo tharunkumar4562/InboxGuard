@@ -71,35 +71,8 @@ let latestRewriteContext = null;
 let latestLearningProfile = null;
 let hasScanResult = false;
 let pendingAction = null;
-let isAuthenticated = localStorage.getItem("ig_auth_ok") === "1";
-const FREE_SCAN_LIMIT = 3;
-
-function todayKey() {
-    const now = new Date();
-    return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-${String(now.getUTCDate()).padStart(2, "0")}`;
-}
-
-function getGuestUsage() {
-    const raw = localStorage.getItem("ig_guest_usage");
-    const currentDay = todayKey();
-    if (!raw) {
-        return { day: currentDay, scans: 0 };
-    }
-    try {
-        const data = JSON.parse(raw);
-        if (!data || data.day !== currentDay) {
-            return { day: currentDay, scans: 0 };
-        }
-        return { day: currentDay, scans: Number(data.scans || 0) };
-    } catch {
-        return { day: currentDay, scans: 0 };
-    }
-}
-
-function setGuestUsage(scans) {
-    const payload = { day: todayKey(), scans: Math.max(0, Number(scans || 0)) };
-    localStorage.setItem("ig_guest_usage", JSON.stringify(payload));
-}
+let isAuthenticated = false;
+let freeRunCount = Number(localStorage.getItem("ig_free_run_count") || "0");
 
 const errorBanner = document.createElement("div");
 errorBanner.id = "error-banner";
@@ -140,12 +113,24 @@ function needsAuthGate(action) {
     if (isAuthenticated) {
         return false;
     }
-    const usage = getGuestUsage();
-    // Option A: allow first value and gate after free limit.
-    if (usage.scans < FREE_SCAN_LIMIT) {
+    // Option A: allow first run without auth, gate subsequent actions.
+    if (action === "analyze" && freeRunCount < 1) {
         return false;
     }
-    return action === "analyze" || action === "fix";
+    return true;
+}
+
+async function refreshAuthStatus() {
+    try {
+        const response = await fetch("/auth/status", { method: "GET" });
+        if (!response.ok) {
+            return;
+        }
+        const data = await response.json();
+        isAuthenticated = Boolean(data && data.authenticated);
+    } catch (error) {
+        // Keep guest path resilient when auth status endpoint is unavailable.
+    }
 }
 
 function runPendingAction() {
@@ -157,9 +142,63 @@ function runPendingAction() {
     pendingAction = null;
 }
 
+function stashPendingContext(actionName) {
+    localStorage.setItem("ig_pending_action", actionName || "analyze");
+    localStorage.setItem("ig_pending_draft", rawEmailInput ? rawEmailInput.value : "");
+    localStorage.setItem("ig_pending_domain", domainInput ? domainInput.value : "");
+    localStorage.setItem("ig_pending_analysis_mode", analysisModeInput ? analysisModeInput.value : "content");
+    localStorage.setItem("ig_pending_rewrite_style", rewriteStyleInput ? rewriteStyleInput.value : "balanced");
+}
+
+function restorePendingContext() {
+    if (rawEmailInput && !rawEmailInput.value) {
+        rawEmailInput.value = localStorage.getItem("ig_pending_draft") || "";
+    }
+    if (domainInput && !domainInput.value) {
+        domainInput.value = localStorage.getItem("ig_pending_domain") || "";
+    }
+    if (analysisModeInput) {
+        const mode = localStorage.getItem("ig_pending_analysis_mode");
+        if (mode) {
+            analysisModeInput.value = mode;
+        }
+    }
+    if (rewriteStyleInput) {
+        const style = localStorage.getItem("ig_pending_rewrite_style");
+        if (style) {
+            rewriteStyleInput.value = style;
+        }
+    }
+}
+
+function clearPendingContext() {
+    localStorage.removeItem("ig_pending_action");
+    localStorage.removeItem("ig_pending_draft");
+    localStorage.removeItem("ig_pending_domain");
+    localStorage.removeItem("ig_pending_analysis_mode");
+    localStorage.removeItem("ig_pending_rewrite_style");
+}
+
+function resumeAfterAccessIfNeeded() {
+    const params = new URLSearchParams(window.location.search);
+    const shouldResume = params.get("resume") === "1";
+    if (!shouldResume || !isAuthenticated) {
+        return;
+    }
+
+    restorePendingContext();
+    const action = localStorage.getItem("ig_pending_action");
+    if (action) {
+        pendingAction = action;
+        runPendingAction();
+    }
+    clearPendingContext();
+    const cleanUrl = window.location.pathname + window.location.hash;
+    window.history.replaceState({}, document.title, cleanUrl);
+}
+
 function onAuthSuccess(source) {
     isAuthenticated = true;
-    localStorage.setItem("ig_auth_ok", "1");
     hideAuthModal();
 
     const payload = new FormData();
@@ -173,13 +212,15 @@ function onAuthSuccess(source) {
 
 function handleAuthAction(action) {
     if (action === "signin") {
-        onAuthSuccess("google_continue");
-        showError("Signed in. Continuing your action...");
+        stashPendingContext(pendingAction || "analyze");
+        hideAuthModal();
+        window.location.href = "/auth/google/login?next=" + encodeURIComponent("/?resume=1");
         return;
     }
     if (action === "create") {
-        onAuthSuccess("email_continue");
-        showError("Account created. Continuing your action...");
+        stashPendingContext(pendingAction || "analyze");
+        hideAuthModal();
+        window.location.href = "/access?mode=email&resume=1";
         return;
     }
     hideAuthModal();
@@ -701,6 +742,7 @@ async function showFixTransformation() {
 }
 
 async function runAnalyze() {
+    await refreshAuthStatus();
     const rawText = rawEmailInput ? rawEmailInput.value.trim() : "";
     const domainText = domainInput ? domainInput.value.trim() : "";
     const mode = analysisModeInput ? analysisModeInput.value : "content";
@@ -765,10 +807,9 @@ async function runAnalyze() {
             resultSection.scrollIntoView({ behavior: "smooth", block: "start" });
         }
         activateTab("dashboard");
-        if (!isAuthenticated) {
-            const usage = getGuestUsage();
-            setGuestUsage(usage.scans + 1);
-        }
+
+        freeRunCount += 1;
+        localStorage.setItem("ig_free_run_count", String(freeRunCount));
     } catch (error) {
         if (loadingTicker) {
             clearInterval(loadingTicker);
@@ -842,7 +883,6 @@ if (startButton) {
     startButton.addEventListener("click", () => {
         pendingAction = "analyze";
         if (needsAuthGate("analyze")) {
-            showError("You used your 3 free scans today. Continue to keep scanning.");
             showAuthModal();
             return;
         }
@@ -853,7 +893,6 @@ if (fixNowButton) {
     fixNowButton.addEventListener("click", () => {
         pendingAction = "fix";
         if (needsAuthGate("fix")) {
-            showError("Continue your scans by signing in.");
             showAuthModal();
             return;
         }
@@ -925,3 +964,6 @@ if (form) {
 
 setIdleState();
 activateTab("dashboard");
+refreshAuthStatus().then(() => {
+    resumeAfterAccessIfNeeded();
+});
