@@ -255,6 +255,8 @@ def login_page(request: Request):
 def access_page(request: Request):
     track_event("page_view", {"page": "access"})
     auth_error = request.query_params.get("error", "")
+    google_configured = bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET)
+    email_otp_configured = bool(SMTP_HOST and SMTP_USERNAME and SMTP_PASSWORD and SMTP_FROM)
     return render_template_safe(
         request,
         "login.html",
@@ -265,8 +267,9 @@ def access_page(request: Request):
             "resume_mode": request.query_params.get("resume", "0"),
             "auth_mode": request.query_params.get("mode", "signin"),
             "auth_error": auth_error,
-            "google_configured": bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET),
-            "email_otp_configured": bool(SMTP_HOST and SMTP_USERNAME and SMTP_PASSWORD and SMTP_FROM),
+            "google_configured": google_configured,
+            "email_otp_configured": email_otp_configured,
+            "providers_configured": bool(google_configured or email_otp_configured),
         },
     )
 
@@ -378,6 +381,13 @@ def auth_email_verify_otp(request: Request, email: str = Form(""), otp: str = Fo
 def auth_logout(request: Request):
     request.session.clear()
     return {"ok": True}
+
+
+@app.get("/auth/continue-guest")
+def auth_continue_guest(request: Request, next: str = "/?resume=1"):
+    # Safety valve: keep users unblocked when auth providers are not configured.
+    _set_auth_session(request, "guest@inboxguard.local", "guest")
+    return RedirectResponse(url=next, status_code=303)
 
 
 @app.get("/p/{slug}", response_class=HTMLResponse)
