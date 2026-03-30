@@ -60,6 +60,8 @@ body {
     border-right: 1px solid var(--border-subtle);
     background: #0d1527;
     padding: 20px 14px;
+    display: flex;
+    flex-direction: column;
 }
 
 .brand-wrap {
@@ -83,38 +85,142 @@ body {
 nav {
     display: grid;
     gap: 8px;
+    flex: 1;
 }
 
-.sidebar-profile-wrap {
-    margin-top: 14px;
-    padding-top: 12px;
-    border-top: 1px solid var(--border-subtle);
+.profile-link {
+    margin-top: 12px;
     display: flex;
-    justify-content: center;
+    align-items: center;
+    gap: 10px;
+    text-decoration: none;
+    border: 1px solid var(--border-strong);
+    border-radius: 12px;
+    padding: 10px;
+    color: var(--text-primary);
+    background: rgba(37, 99, 235, 0.08);
 }
 
-.profile-circle {
-    width: 56px;
-    height: 56px;
+.profile-link:hover {
+    border-color: #2563eb;
+    background: rgba(37, 99, 235, 0.16);
+}
+
+.profile-badge {
+    width: 36px;
+    height: 36px;
     border-radius: 999px;
-    border: 1px solid #2563eb;
-    background: radial-gradient(circle at 30% 20%, #1e3a8a, #0f1a2e);
-    cursor: pointer;
     display: grid;
     place-items: center;
-    overflow: hidden;
+    font-weight: 700;
+    color: #dbeafe;
+    background: linear-gradient(135deg, #1d4ed8, #2563eb);
 }
 
-.profile-avatar {
-    width: 100%;
-    height: 100%;
+.profile-meta {
+    display: grid;
+    gap: 2px;
+}
+
+.profile-meta strong {
+    font-size: 0.87rem;
+}
+
+.profile-meta small {
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    max-width: 148px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.account-shell {
+    min-height: 100vh;
+    padding: 28px 16px;
+    display: grid;
+    place-items: center;
+}
+
+.account-card {
+    width: min(760px, 100%);
+    border: 1px solid var(--border-strong);
+    border-radius: 16px;
+    background: #0d1527;
+    padding: 20px;
+}
+
+.account-head {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 16px;
+}
+
+.account-head h1 {
+    margin: 0;
+    font-size: 1.5rem;
+}
+
+.account-head p {
+    margin: 5px 0 0;
+    color: var(--text-secondary);
+}
+
+.account-avatar {
+    width: 72px;
+    height: 72px;
+    border-radius: 999px;
+    border: 2px solid #1d4ed8;
     object-fit: cover;
 }
 
-.profile-initial {
+.account-avatar-fallback {
+    display: grid;
+    place-items: center;
+    background: linear-gradient(135deg, #1d4ed8, #2563eb);
     color: #dbeafe;
+    font-size: 1.25rem;
+    font-weight: 700;
+}
+
+.account-stats {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+    margin: 14px 0;
+}
+
+.stat-box {
+    border: 1px solid var(--border-subtle);
+    border-radius: 12px;
+    background: #10203c;
+    padding: 12px;
+}
+
+.stat-label {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+}
+
+.stat-value {
+    margin: 6px 0 0;
     font-size: 1rem;
     font-weight: 700;
+}
+
+.account-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 8px;
+}
+
+@media (max-width: 900px) {
+    .account-stats {
+        grid-template-columns: 1fr;
+    }
 }
 
 .nav-item {
@@ -189,51 +295,6 @@ nav {
     margin-top: 2px;
     font-weight: 700;
     color: #bfdbfe;
-}
-
-.profile-panel {
-    margin-bottom: 12px;
-}
-
-.profile-header {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 12px;
-}
-
-.profile-header h2 {
-    margin: 0;
-    font-size: 1.3rem;
-}
-
-.profile-avatar-large-wrap {
-    width: 72px;
-    height: 72px;
-    border-radius: 999px;
-    border: 1px solid #2563eb;
-    background: radial-gradient(circle at 30% 20%, #1e3a8a, #0f1a2e);
-    overflow: hidden;
-    display: grid;
-    place-items: center;
-}
-
-.profile-avatar-large {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-}
-
-.profile-initial-large {
-    color: #dbeafe;
-    font-size: 1.5rem;
-    font-weight: 800;
-}
-
-.profile-stats {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 10px;
 }
 
 .tab-feedback {
@@ -804,7 +865,6 @@ select {
 @media (max-width: 900px) {
 
     .status-grid,
-    .profile-stats,
     .actions,
     .support-grid,
     .advanced-content,
@@ -873,8 +933,4 @@ select {
     gap: 10px;
     margin-top: 12px;
     margin-bottom: 8px;
-}
-
-.profile-circle.active {
-    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.45);
 }

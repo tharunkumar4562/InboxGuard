@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{ page_title }}</title>
+    <meta name="description" content="{{ meta_description }}" />
+    <link rel="canonical" href="{{ canonical_url }}" />
+    <link rel="icon" href="/static/favicon-48.png" type="image/png" sizes="48x48" />
+    <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" sizes="any" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/static/css/styles.css" />
+  </head>
+  <body>
+    <main class="account-shell">
+      <section class="account-card">
+        <div class="account-head">
+          {% if user_avatar %}
+          <img src="{{ user_avatar }}" alt="{{ user_name }}" class="account-avatar" referrerpolicy="no-referrer" />
+          {% else %}
+          <div class="account-avatar account-avatar-fallback">{{ user_initials }}</div>
+          {% endif %}
+          <div>
+            <h1>{{ user_name }}</h1>
+            <p>{{ user_email }}</p>
+          </div>
+        </div>
+
+        <div class="account-stats">
+          <article class="stat-box">
+            <p class="stat-label">Scans used</p>
+            <p class="stat-value">{{ scans_used }}</p>
+          </article>
+          <article class="stat-box">
+            <p class="stat-label">Fix clicked</p>
+            <p class="stat-value">{{ rewrite_clicked }}</p>
+          </article>
+          <article class="stat-box">
+            <p class="stat-label">Last active</p>
+            <p class="stat-value">{{ last_active if last_active else 'Just now' }}</p>
+          </article>
+        </div>
+
+        <div class="account-actions">
+          <a class="btn-secondary" href="/">Back to scanner</a>
+          <button id="logout-btn" class="btn-primary" type="button">Sign out</button>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      (function () {
+        const logoutBtn = document.getElementById("logout-btn");
+        if (!logoutBtn) {
+          return;
+        }
+
+        logoutBtn.addEventListener("click", async function () {
+          try {
+            await fetch("/auth/logout", { method: "POST" });
+          } catch (error) {
+            // Ignore and redirect anyway.
+          }
+          window.location.href = "/";
+        });
+      })();
+    </script>
+  </body>
+</html>
