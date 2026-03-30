@@ -12,6 +12,11 @@ const authSignInButton = document.getElementById("auth-signin");
 const authCreateButton = document.getElementById("auth-create");
 const authCloseButton = document.getElementById("auth-close");
 const authEmailInput = document.getElementById("auth-email");
+const profileStatusNode = document.getElementById("profile-status");
+const profileEmailNode = document.getElementById("profile-email");
+const profileUsageNode = document.getElementById("profile-usage");
+const profileSignoutButton = document.getElementById("profile-signout");
+const accessLink = document.getElementById("access-link");
 
 const rawEmailInput = document.getElementById("raw-email");
 const domainInput = document.getElementById("domain");
@@ -77,7 +82,35 @@ let anonymousScansUsed = Number(localStorage.getItem("ig_anon_scans_used") || "0
 let anonymousScansLimit = Number(localStorage.getItem("ig_anon_scans_limit") || "3");
 let userScansUsed = 0;
 let userScansLimit = 50;
-let googleEnabled = false;
+let currentUserEmail = "";
+
+function renderProfile() {
+    if (!profileStatusNode || !profileEmailNode || !profileUsageNode) {
+        return;
+    }
+
+    if (isAuthenticated) {
+        profileStatusNode.textContent = "Signed in";
+        profileEmailNode.textContent = currentUserEmail || "Authenticated user";
+        profileUsageNode.textContent = `Scans used: ${userScansUsed} / ${userScansLimit} this month`;
+        if (profileSignoutButton) {
+            profileSignoutButton.classList.remove("hidden");
+        }
+        if (accessLink) {
+            accessLink.classList.add("hidden");
+        }
+    } else {
+        profileStatusNode.textContent = "Guest mode";
+        profileEmailNode.textContent = "Run free scans, then continue with Google or email.";
+        profileUsageNode.textContent = `Scans used: ${anonymousScansUsed} / ${anonymousScansLimit} free`;
+        if (profileSignoutButton) {
+            profileSignoutButton.classList.add("hidden");
+        }
+        if (accessLink) {
+            accessLink.classList.remove("hidden");
+        }
+    }
+}
 
 const errorBanner = document.createElement("div");
 errorBanner.id = "error-banner";
@@ -134,16 +167,18 @@ async function refreshAuthStatus() {
         }
         const data = await response.json();
         isAuthenticated = Boolean(data && data.authenticated);
+        currentUserEmail = String(data && data.email ? data.email : "");
         anonymousScansUsed = Number(data && data.anonymous_scans_used ? data.anonymous_scans_used : 0);
         anonymousScansLimit = Number(data && data.anonymous_scans_limit ? data.anonymous_scans_limit : 3);
         userScansUsed = Number(data && data.user_scans_used ? data.user_scans_used : 0);
         userScansLimit = Number(data && data.user_scans_limit ? data.user_scans_limit : 50);
-        googleEnabled = Boolean(data && data.google_enabled);
 
         localStorage.setItem("ig_anon_scans_used", String(anonymousScansUsed));
         localStorage.setItem("ig_anon_scans_limit", String(anonymousScansLimit));
+        renderProfile();
     } catch (error) {
         // Keep UI operational even if auth status endpoint is temporarily unavailable.
+        renderProfile();
     }
 }
 
@@ -212,15 +247,11 @@ function resumePendingAfterAuthIfNeeded() {
 function openAuthModalFromQueryIfNeeded() {
     const params = new URLSearchParams(window.location.search);
     const shouldOpen = params.get("auth") === "1";
-    const googleMissing = params.get("google_not_configured") === "1";
     if (!shouldOpen) {
         return;
     }
 
     showAuthModal();
-    if (googleMissing) {
-        showError("Google Sign-In is not configured yet. Use Continue with Email now, then set Google env vars.");
-    }
     const cleanUrl = window.location.pathname + window.location.hash;
     window.history.replaceState({}, document.title, cleanUrl);
 }
@@ -236,6 +267,22 @@ function onAuthSuccess(source) {
     fetch("/track", { method: "POST", body: payload }).catch(() => null);
 
     runPendingAction();
+    renderProfile();
+}
+
+async function signOutProfile() {
+    try {
+        await fetch("/auth/logout", { method: "POST" });
+    } catch (error) {
+        // Ignore transient logout network failures and proceed with local reset.
+    }
+
+    isAuthenticated = false;
+    currentUserEmail = "";
+    userScansUsed = 0;
+    hideAuthModal();
+    renderProfile();
+    showError("Signed out.");
 }
 
 async function continueWithEmail() {
@@ -263,13 +310,6 @@ async function continueWithEmail() {
 }
 
 async function continueWithGoogle() {
-    await refreshAuthStatus();
-    if (!googleEnabled) {
-        showAuthModal();
-        showError("Google Sign-In is not configured yet. Use Continue with Email now.");
-        return;
-    }
-
     stashPendingContext(pendingAction || "analyze");
     localStorage.setItem("ig_resume_after_auth", "1");
     const next = encodeURIComponent("/");
@@ -1021,6 +1061,9 @@ if (authCreateButton) {
 if (authCloseButton) {
     authCloseButton.addEventListener("click", () => handleAuthAction("close"));
 }
+if (profileSignoutButton) {
+    profileSignoutButton.addEventListener("click", () => signOutProfile());
+}
 if (authModal) {
     authModal.addEventListener("click", (event) => {
         const target = event.target;
@@ -1063,6 +1106,7 @@ if (form) {
 
 setIdleState();
 activateTab("dashboard");
+renderProfile();
 refreshAuthStatus().then(() => {
     resumePendingAfterAuthIfNeeded();
     openAuthModalFromQueryIfNeeded();

@@ -63,6 +63,13 @@
           <button class="nav-item disabled" type="button">Results <span>Coming soon</span></button>
           <button class="nav-item disabled" type="button">Reports <span>Coming soon</span></button>
         </nav>
+        <section class="sidebar-profile" aria-label="Profile">
+          <p class="profile-title">Profile</p>
+          <p id="profile-status" class="profile-status">Guest mode</p>
+          <p id="profile-email" class="profile-email">Run 3 free scans before sign-in.</p>
+          <p id="profile-usage" class="profile-usage">Scans used: 0 / 3</p>
+          <button id="profile-signout" type="button" class="profile-signout hidden">Sign out</button>
+        </section>
       </aside>
 
       <main class="main-area">
@@ -70,7 +77,7 @@
           <h1>InboxGuard</h1>
           <div class="topbar-actions">
             <button id="start-btn" type="button" class="start-btn">Start</button>
-            <a class="access-link" href="/access">Get Access</a>
+            <a id="access-link" class="access-link" href="/?auth=1">Get Access</a>
           </div>
         </header>
         <section class="hero-story card">
@@ -284,6 +291,6 @@ Only 1 day left to register..."></textarea>
       </div>
     </div>
 
-    <script src="/static/js/app.js?v=20260330-5"></script>
+    <script src="/static/js/app.js?v=20260330-6"></script>
   </body>
 </html>
