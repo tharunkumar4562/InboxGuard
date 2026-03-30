@@ -63,13 +63,12 @@
           <button class="nav-item disabled" type="button">Results <span>Coming soon</span></button>
           <button class="nav-item disabled" type="button">Reports <span>Coming soon</span></button>
         </nav>
-        <section class="sidebar-profile" aria-label="Profile">
-          <p class="profile-title">Profile</p>
-          <p id="profile-status" class="profile-status">Guest mode</p>
-          <p id="profile-email" class="profile-email">Run 3 free scans before sign-in.</p>
-          <p id="profile-usage" class="profile-usage">Scans used: 0 / 3</p>
-          <button id="profile-signout" type="button" class="profile-signout hidden">Sign out</button>
-        </section>
+        <div class="sidebar-profile-wrap">
+          <button id="tab-profile" class="profile-circle" type="button" aria-label="Open profile">
+            <img id="sidebar-profile-avatar" class="profile-avatar hidden" alt="Profile" />
+            <span id="sidebar-profile-initial" class="profile-initial">U</span>
+          </button>
+        </div>
       </aside>
 
       <main class="main-area">
@@ -77,7 +76,7 @@
           <h1>InboxGuard</h1>
           <div class="topbar-actions">
             <button id="start-btn" type="button" class="start-btn">Start</button>
-            <a id="access-link" class="access-link" href="/?auth=1">Get Access</a>
+            <a class="access-link" href="/access">Get Access</a>
           </div>
         </header>
         <section class="hero-story card">
@@ -85,6 +84,37 @@
           <p>Most emails fail because of hidden bulk patterns, not obvious mistakes.</p>
           <p>This catches those patterns before you send, then rewrites your draft into a safer version you can actually use.</p>
           <p class="hero-note">Check before send. Protect your domain reputation.</p>
+        </section>
+
+        <section id="profile-view" class="card hidden profile-panel">
+          <div class="profile-header">
+            <div class="profile-avatar-large-wrap">
+              <img id="profile-avatar" class="profile-avatar-large hidden" alt="Profile" />
+              <span id="profile-initial" class="profile-initial-large">U</span>
+            </div>
+            <div>
+              <h2 id="profile-name">InboxGuard User</h2>
+              <p id="profile-email" class="micro">Not signed in</p>
+            </div>
+          </div>
+          <div class="profile-stats">
+            <article class="status-card">
+              <p class="status-label">Total scans</p>
+              <p id="profile-scan-count" class="status-value">0</p>
+            </article>
+            <article class="status-card">
+              <p class="status-label">Emails scanned</p>
+              <p id="profile-email-count" class="status-value">0</p>
+            </article>
+            <article class="status-card">
+              <p class="status-label">Rewrite used</p>
+              <p id="profile-rewrite-count" class="status-value">0</p>
+            </article>
+          </div>
+          <p id="profile-last-active" class="micro">Last active: -</p>
+          <div class="actions" style="margin-top: 10px;">
+            <button id="profile-back" type="button" class="btn-secondary">Back to Home</button>
+          </div>
         </section>
         <p id="tab-feedback" class="tab-feedback">Paste your draft below to scan and fix it before sending.</p>
 
@@ -291,6 +321,6 @@ Only 1 day left to register..."></textarea>
       </div>
     </div>
 
-    <script src="/static/js/app.js?v=20260330-6"></script>
+    <script src="/static/js/app.js?v=20260330-7"></script>
   </body>
 </html>

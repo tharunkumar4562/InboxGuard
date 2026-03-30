@@ -85,51 +85,36 @@ nav {
     gap: 8px;
 }
 
-.sidebar-profile {
+.sidebar-profile-wrap {
     margin-top: 14px;
-    border: 1px solid var(--border-subtle);
-    border-radius: 10px;
-    background: #111d31;
-    padding: 10px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border-subtle);
+    display: flex;
+    justify-content: center;
 }
 
-.profile-title {
-    margin: 0 0 6px;
-    font-size: 0.84rem;
-    font-weight: 700;
-    color: #bfdbfe;
-}
-
-.profile-status {
-    margin: 0;
-    font-size: 0.88rem;
-    font-weight: 700;
-    color: #e2e8f0;
-}
-
-.profile-email,
-.profile-usage {
-    margin: 6px 0 0;
-    font-size: 0.78rem;
-    color: var(--text-secondary);
-    line-height: 1.4;
-}
-
-.profile-signout {
-    margin-top: 10px;
-    width: 100%;
-    border: 1px solid #334155;
-    border-radius: 8px;
-    background: #0f172a;
-    color: #cbd5e1;
-    padding: 8px 10px;
-    font-size: 0.82rem;
-    font-weight: 700;
+.profile-circle {
+    width: 56px;
+    height: 56px;
+    border-radius: 999px;
+    border: 1px solid #2563eb;
+    background: radial-gradient(circle at 30% 20%, #1e3a8a, #0f1a2e);
     cursor: pointer;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
 }
 
-.profile-signout:hover {
-    border-color: #475569;
+.profile-avatar {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.profile-initial {
+    color: #dbeafe;
+    font-size: 1rem;
+    font-weight: 700;
 }
 
 .nav-item {
@@ -204,6 +189,51 @@ nav {
     margin-top: 2px;
     font-weight: 700;
     color: #bfdbfe;
+}
+
+.profile-panel {
+    margin-bottom: 12px;
+}
+
+.profile-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.profile-header h2 {
+    margin: 0;
+    font-size: 1.3rem;
+}
+
+.profile-avatar-large-wrap {
+    width: 72px;
+    height: 72px;
+    border-radius: 999px;
+    border: 1px solid #2563eb;
+    background: radial-gradient(circle at 30% 20%, #1e3a8a, #0f1a2e);
+    overflow: hidden;
+    display: grid;
+    place-items: center;
+}
+
+.profile-avatar-large {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.profile-initial-large {
+    color: #dbeafe;
+    font-size: 1.5rem;
+    font-weight: 800;
+}
+
+.profile-stats {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
 }
 
 .tab-feedback {
@@ -774,6 +804,7 @@ select {
 @media (max-width: 900px) {
 
     .status-grid,
+    .profile-stats,
     .actions,
     .support-grid,
     .advanced-content,
@@ -842,4 +873,8 @@ select {
     gap: 10px;
     margin-top: 12px;
     margin-bottom: 8px;
+}
+
+.profile-circle.active {
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.45);
 }

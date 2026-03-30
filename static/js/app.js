@@ -5,6 +5,7 @@ const scanPanel = document.querySelector(".scan-panel");
 const tabFeedbackNode = document.getElementById("tab-feedback");
 const dashboardTab = document.getElementById("tab-dashboard");
 const threatScanTab = document.getElementById("tab-threat-scan");
+const profileTab = document.getElementById("tab-profile");
 const startButton = document.getElementById("start-btn");
 
 const authModal = document.getElementById("auth-modal");
@@ -12,11 +13,8 @@ const authSignInButton = document.getElementById("auth-signin");
 const authCreateButton = document.getElementById("auth-create");
 const authCloseButton = document.getElementById("auth-close");
 const authEmailInput = document.getElementById("auth-email");
-const profileStatusNode = document.getElementById("profile-status");
-const profileEmailNode = document.getElementById("profile-email");
-const profileUsageNode = document.getElementById("profile-usage");
-const profileSignoutButton = document.getElementById("profile-signout");
-const accessLink = document.getElementById("access-link");
+const sidebarProfileAvatar = document.getElementById("sidebar-profile-avatar");
+const sidebarProfileInitial = document.getElementById("sidebar-profile-initial");
 
 const rawEmailInput = document.getElementById("raw-email");
 const domainInput = document.getElementById("domain");
@@ -24,6 +22,16 @@ const analysisModeInput = document.getElementById("analysis-mode");
 const submitButton = document.getElementById("run-check");
 const loadingPanel = document.getElementById("result-loading");
 const loadingStep = document.getElementById("loading-step");
+const profileView = document.getElementById("profile-view");
+const profileAvatar = document.getElementById("profile-avatar");
+const profileInitial = document.getElementById("profile-initial");
+const profileNameNode = document.getElementById("profile-name");
+const profileEmailNode = document.getElementById("profile-email");
+const profileScanCountNode = document.getElementById("profile-scan-count");
+const profileEmailCountNode = document.getElementById("profile-email-count");
+const profileRewriteCountNode = document.getElementById("profile-rewrite-count");
+const profileLastActiveNode = document.getElementById("profile-last-active");
+const profileBackButton = document.getElementById("profile-back");
 
 const statusRiskBandNode = document.getElementById("status-risk-band");
 const statusRiskCardNode = document.getElementById("status-risk-card");
@@ -78,39 +86,13 @@ let latestLearningProfile = null;
 let hasScanResult = false;
 let pendingAction = null;
 let isAuthenticated = false;
+let userName = "";
+let userEmail = "";
+let userAvatarUrl = "";
 let anonymousScansUsed = Number(localStorage.getItem("ig_anon_scans_used") || "0");
 let anonymousScansLimit = Number(localStorage.getItem("ig_anon_scans_limit") || "3");
 let userScansUsed = 0;
 let userScansLimit = 50;
-let currentUserEmail = "";
-
-function renderProfile() {
-    if (!profileStatusNode || !profileEmailNode || !profileUsageNode) {
-        return;
-    }
-
-    if (isAuthenticated) {
-        profileStatusNode.textContent = "Signed in";
-        profileEmailNode.textContent = currentUserEmail || "Authenticated user";
-        profileUsageNode.textContent = `Scans used: ${userScansUsed} / ${userScansLimit} this month`;
-        if (profileSignoutButton) {
-            profileSignoutButton.classList.remove("hidden");
-        }
-        if (accessLink) {
-            accessLink.classList.add("hidden");
-        }
-    } else {
-        profileStatusNode.textContent = "Guest mode";
-        profileEmailNode.textContent = "Run free scans, then continue with Google or email.";
-        profileUsageNode.textContent = `Scans used: ${anonymousScansUsed} / ${anonymousScansLimit} free`;
-        if (profileSignoutButton) {
-            profileSignoutButton.classList.add("hidden");
-        }
-        if (accessLink) {
-            accessLink.classList.remove("hidden");
-        }
-    }
-}
 
 const errorBanner = document.createElement("div");
 errorBanner.id = "error-banner";
@@ -130,6 +112,56 @@ function sleep(ms) {
 function setTabFeedback(message) {
     if (tabFeedbackNode) {
         tabFeedbackNode.textContent = message;
+    }
+}
+
+function deriveInitial(name, email) {
+    const n = String(name || "").trim();
+    if (n) {
+        return n[0].toUpperCase();
+    }
+    const e = String(email || "").trim();
+    return e ? e[0].toUpperCase() : "U";
+}
+
+function renderProfileBadge() {
+    const initial = deriveInitial(userName, userEmail);
+    if (sidebarProfileInitial) {
+        sidebarProfileInitial.textContent = initial;
+    }
+    if (profileInitial) {
+        profileInitial.textContent = initial;
+    }
+
+    const hasAvatar = Boolean(userAvatarUrl);
+    if (sidebarProfileAvatar) {
+        if (hasAvatar) {
+            sidebarProfileAvatar.src = userAvatarUrl;
+            sidebarProfileAvatar.classList.remove("hidden");
+            if (sidebarProfileInitial) {
+                sidebarProfileInitial.classList.add("hidden");
+            }
+        } else {
+            sidebarProfileAvatar.classList.add("hidden");
+            if (sidebarProfileInitial) {
+                sidebarProfileInitial.classList.remove("hidden");
+            }
+        }
+    }
+
+    if (profileAvatar) {
+        if (hasAvatar) {
+            profileAvatar.src = userAvatarUrl;
+            profileAvatar.classList.remove("hidden");
+            if (profileInitial) {
+                profileInitial.classList.add("hidden");
+            }
+        } else {
+            profileAvatar.classList.add("hidden");
+            if (profileInitial) {
+                profileInitial.classList.remove("hidden");
+            }
+        }
     }
 }
 
@@ -167,7 +199,9 @@ async function refreshAuthStatus() {
         }
         const data = await response.json();
         isAuthenticated = Boolean(data && data.authenticated);
-        currentUserEmail = String(data && data.email ? data.email : "");
+        userName = String(data && data.name ? data.name : "");
+        userEmail = String(data && data.email ? data.email : "");
+        userAvatarUrl = String(data && data.avatar_url ? data.avatar_url : "");
         anonymousScansUsed = Number(data && data.anonymous_scans_used ? data.anonymous_scans_used : 0);
         anonymousScansLimit = Number(data && data.anonymous_scans_limit ? data.anonymous_scans_limit : 3);
         userScansUsed = Number(data && data.user_scans_used ? data.user_scans_used : 0);
@@ -175,10 +209,47 @@ async function refreshAuthStatus() {
 
         localStorage.setItem("ig_anon_scans_used", String(anonymousScansUsed));
         localStorage.setItem("ig_anon_scans_limit", String(anonymousScansLimit));
-        renderProfile();
+        renderProfileBadge();
     } catch (error) {
         // Keep UI operational even if auth status endpoint is temporarily unavailable.
-        renderProfile();
+    }
+}
+
+async function loadProfileView() {
+    if (!profileNameNode || !profileEmailNode || !profileScanCountNode || !profileEmailCountNode || !profileRewriteCountNode || !profileLastActiveNode) {
+        return;
+    }
+
+    if (!isAuthenticated) {
+        profileNameNode.textContent = "Guest User";
+        profileEmailNode.textContent = "Sign in to see your account profile.";
+        profileScanCountNode.textContent = "0";
+        profileEmailCountNode.textContent = "0";
+        profileRewriteCountNode.textContent = "0";
+        profileLastActiveNode.textContent = "Last active: -";
+        renderProfileBadge();
+        return;
+    }
+
+    try {
+        const response = await fetch("/auth/profile", { method: "GET" });
+        if (!response.ok) {
+            throw new Error("Could not load profile.");
+        }
+        const data = await response.json();
+        userName = String(data.name || userName || "InboxGuard User");
+        userEmail = String(data.email || userEmail || "");
+        userAvatarUrl = String(data.avatar_url || userAvatarUrl || "");
+
+        profileNameNode.textContent = userName;
+        profileEmailNode.textContent = userEmail || "-";
+        profileScanCountNode.textContent = String(data.scans_used || 0);
+        profileEmailCountNode.textContent = String(data.emails_scanned_count || 0);
+        profileRewriteCountNode.textContent = String(data.rewrite_clicked || 0);
+        profileLastActiveNode.textContent = `Last active: ${data.last_active || "-"}`;
+        renderProfileBadge();
+    } catch (error) {
+        profileLastActiveNode.textContent = "Last active: unavailable";
     }
 }
 
@@ -267,22 +338,6 @@ function onAuthSuccess(source) {
     fetch("/track", { method: "POST", body: payload }).catch(() => null);
 
     runPendingAction();
-    renderProfile();
-}
-
-async function signOutProfile() {
-    try {
-        await fetch("/auth/logout", { method: "POST" });
-    } catch (error) {
-        // Ignore transient logout network failures and proceed with local reset.
-    }
-
-    isAuthenticated = false;
-    currentUserEmail = "";
-    userScansUsed = 0;
-    hideAuthModal();
-    renderProfile();
-    showError("Signed out.");
 }
 
 async function continueWithEmail() {
@@ -342,6 +397,40 @@ function activateTab(tab) {
 
     dashboardTab.classList.remove("active");
     threatScanTab.classList.remove("active");
+    if (profileTab) {
+        profileTab.classList.remove("active");
+    }
+
+    const dashboardSections = [
+        document.querySelector(".hero-story"),
+        document.getElementById("tab-feedback"),
+        document.querySelector(".scan-panel"),
+        document.getElementById("idle-note"),
+        document.getElementById("result"),
+    ];
+
+    if (tab === "profile") {
+        if (profileTab) {
+            profileTab.classList.add("active");
+        }
+        dashboardSections.forEach((node) => node && node.classList.add("hidden"));
+        if (profileView) {
+            profileView.classList.remove("hidden");
+            profileView.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+        loadProfileView().catch(() => null);
+        setTabFeedback("Your account profile and usage stats.");
+        return;
+    }
+
+    dashboardSections.forEach((node) => {
+        if (node && node.id !== "result") {
+            node.classList.remove("hidden");
+        }
+    });
+    if (profileView) {
+        profileView.classList.add("hidden");
+    }
 
     if (tab === "threat-scan") {
         threatScanTab.classList.add("active");
@@ -1010,6 +1099,12 @@ if (dashboardTab) {
 if (threatScanTab) {
     threatScanTab.addEventListener("click", () => activateTab("threat-scan"));
 }
+if (profileTab) {
+    profileTab.addEventListener("click", () => activateTab("profile"));
+}
+if (profileBackButton) {
+    profileBackButton.addEventListener("click", () => activateTab("dashboard"));
+}
 if (startButton) {
     startButton.addEventListener("click", () => {
         pendingAction = "analyze";
@@ -1061,9 +1156,6 @@ if (authCreateButton) {
 if (authCloseButton) {
     authCloseButton.addEventListener("click", () => handleAuthAction("close"));
 }
-if (profileSignoutButton) {
-    profileSignoutButton.addEventListener("click", () => signOutProfile());
-}
 if (authModal) {
     authModal.addEventListener("click", (event) => {
         const target = event.target;
@@ -1106,7 +1198,6 @@ if (form) {
 
 setIdleState();
 activateTab("dashboard");
-renderProfile();
 refreshAuthStatus().then(() => {
     resumePendingAfterAuthIfNeeded();
     openAuthModalFromQueryIfNeeded();
