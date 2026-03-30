@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{ page_title }}</title>
+    <meta name="description" content="{{ meta_description }}" />
+    <link rel="canonical" href="{{ canonical_url }}" />
+    <link rel="icon" href="/static/favicon-48.png" type="image/png" sizes="48x48" />
+    <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" sizes="any" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/static/css/styles.css" />
+  </head>
+  <body>
+    <div class="profile-shell">
+      <header class="profile-topbar">
+        <a class="profile-back" href="/">Back to scan</a>
+        <form method="post" action="/auth/logout">
+          <button type="submit" class="profile-logout">Log out</button>
+        </form>
+      </header>
+
+      <main class="profile-main">
+        <section class="profile-card">
+          <img class="profile-avatar-large" src="{{ profile.avatar_url }}" alt="{{ profile.name }}" />
+          <div>
+            <h1>{{ profile.name }}</h1>
+            <p class="profile-email">{{ profile.email }}</p>
+          </div>
+        </section>
+
+        <section class="profile-stats-grid">
+          <article class="profile-stat-card">
+            <p class="profile-stat-label">Scans Used</p>
+            <p class="profile-stat-value">{{ profile.scans_used }}</p>
+          </article>
+          <article class="profile-stat-card">
+            <p class="profile-stat-label">Emails Scanned</p>
+            <p class="profile-stat-value">{{ profile.emails_scanned_count }}</p>
+          </article>
+          <article class="profile-stat-card">
+            <p class="profile-stat-label">Rewrite Clicks</p>
+            <p class="profile-stat-value">{{ profile.rewrite_clicked }}</p>
+          </article>
+          <article class="profile-stat-card">
+            <p class="profile-stat-label">Last Active</p>
+            <p class="profile-stat-value profile-small">{{ profile.last_active or '—' }}</p>
+          </article>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

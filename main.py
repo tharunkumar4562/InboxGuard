@@ -254,23 +254,6 @@ def _get_or_create_google_user(email: str) -> int:
     return _create_user(email, random_password)
 
 
-def _display_name_from_email(email: str) -> str:
-    local = (email or "").split("@", 1)[0]
-    local = re.sub(r"[._-]+", " ", local).strip()
-    if not local:
-        return "InboxGuard User"
-    return " ".join(part.capitalize() for part in local.split())
-
-
-def _initials(name: str) -> str:
-    parts = [p for p in (name or "").split() if p]
-    if not parts:
-        return "IG"
-    if len(parts) == 1:
-        return parts[0][:2].upper()
-    return f"{parts[0][0]}{parts[1][0]}".upper()
-
-
 def _google_client() -> Optional[Any]:
     try:
         return oauth.create_client("google")
@@ -356,16 +339,31 @@ def _get_session_user(request: Request):
     email = str(request.session.get("user_email", "")).strip().lower()
     if user_id <= 0 or not email:
         return None
-    name = str(request.session.get("user_name", "")).strip() or _display_name_from_email(email)
-    avatar_url = str(request.session.get("user_avatar", "")).strip()
-    return {"id": user_id, "email": email, "name": name, "avatar_url": avatar_url}
+    return {
+        "id": user_id,
+        "email": email,
+        "name": str(request.session.get("user_name", "")).strip(),
+        "picture": str(request.session.get("user_picture", "")).strip(),
+    }
 
 
-def _set_session_user(request: Request, user_id: int, email: str, name: str = "", avatar_url: str = "") -> None:
+def _display_name_from_email(email: str) -> str:
+    local = (email or "").split("@", 1)[0].replace(".", " ").replace("_", " ").strip()
+    if not local:
+        return "InboxGuard User"
+    return " ".join(word.capitalize() for word in local.split() if word)
+
+
+def _avatar_url_for_email(email: str) -> str:
+    digest = hashlib.md5((email or "").strip().lower().encode("utf-8")).hexdigest()
+    return f"https://www.gravatar.com/avatar/{digest}?d=identicon&s=120"
+
+
+def _set_session_user(request: Request, user_id: int, email: str, name: str = "", picture: str = "") -> None:
     request.session["user_id"] = user_id
     request.session["user_email"] = email
-    request.session["user_name"] = (name or _display_name_from_email(email)).strip()
-    request.session["user_avatar"] = (avatar_url or "").strip()
+    request.session["user_name"] = name.strip() or _display_name_from_email(email)
+    request.session["user_picture"] = picture.strip() or _avatar_url_for_email(email)
 
 
 def _auth_status_payload(request: Request) -> dict:
@@ -375,8 +373,7 @@ def _auth_status_payload(request: Request) -> dict:
         "authenticated": bool(user),
         "email": user["email"] if user else "",
         "name": user["name"] if user else "",
-        "avatar_url": user["avatar_url"] if user else "",
-        "initials": _initials(user["name"]) if user else "IG",
+        "avatar_url": user["picture"] if user else "",
         "anonymous_scans_used": anon_used,
         "anonymous_scans_limit": ANON_SCAN_LIMIT,
         "user_scans_used": 0,
@@ -469,31 +466,6 @@ def home(request: Request):
     )
 
 
-@app.get("/account", response_class=HTMLResponse)
-def account_page(request: Request):
-    user = _get_session_user(request)
-    if not user:
-        return RedirectResponse(url="/?auth=1", status_code=303)
-
-    usage = _get_usage(int(user["id"]))
-    return render_template_safe(
-        request,
-        "account.html",
-        {
-            "page_title": "Your Account | InboxGuard",
-            "meta_description": "View your InboxGuard profile and usage stats.",
-            "canonical_url": f"{SITE_URL}/account",
-            "user_name": user["name"],
-            "user_email": user["email"],
-            "user_avatar": user["avatar_url"],
-            "user_initials": _initials(user["name"]),
-            "scans_used": usage["scans_used"],
-            "rewrite_clicked": usage["rewrite_clicked"],
-            "last_active": usage["last_active"],
-        },
-    )
-
-
 @app.get("/login", response_class=HTMLResponse)
 def login_page(request: Request):
     return RedirectResponse(url="/?auth=1", status_code=303)
@@ -509,6 +481,56 @@ def auth_status(request: Request):
     return _auth_status_payload(request)
 
 
+@app.get("/auth/me")
+def auth_me(request: Request):
+    user = _get_session_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    usage = _get_usage(user["id"])
+    return {
+        "authenticated": True,
+        "profile": {
+            "name": user["name"] or _display_name_from_email(user["email"]),
+            "email": user["email"],
+            "avatar_url": user["picture"] or _avatar_url_for_email(user["email"]),
+            "scans_used": usage["scans_used"],
+            "emails_scanned_count": usage["emails_scanned_count"],
+            "rewrite_clicked": usage["rewrite_clicked"],
+            "last_active": usage["last_active"],
+        },
+    }
+
+
+@app.get("/profile", response_class=HTMLResponse)
+def profile_page(request: Request):
+    user = _get_session_user(request)
+    if not user:
+        return RedirectResponse(url="/?auth=1", status_code=303)
+
+    usage = _get_usage(user["id"])
+    profile = {
+        "name": user["name"] or _display_name_from_email(user["email"]),
+        "email": user["email"],
+        "avatar_url": user["picture"] or _avatar_url_for_email(user["email"]),
+        "scans_used": usage["scans_used"],
+        "emails_scanned_count": usage["emails_scanned_count"],
+        "rewrite_clicked": usage["rewrite_clicked"],
+        "last_active": usage["last_active"],
+    }
+
+    return render_template_safe(
+        request,
+        "profile.html",
+        {
+            "page_title": "Your Profile | InboxGuard",
+            "meta_description": "View your InboxGuard account profile and usage.",
+            "canonical_url": f"{SITE_URL}/profile",
+            "profile": profile,
+        },
+    )
+
+
 @app.post("/signup")
 def signup(request: Request, email: str = Form(""), password: str = Form("")):
     clean_email = (email or "").strip().lower()
@@ -522,7 +544,7 @@ def signup(request: Request, email: str = Form(""), password: str = Form("")):
         raise HTTPException(status_code=409, detail="Account already exists, please sign in")
 
     user_id = _create_user(clean_email, clean_password)
-    _set_session_user(request, user_id, clean_email, _display_name_from_email(clean_email), "")
+    _set_session_user(request, user_id, clean_email)
     track_event("access_request", {"target": "signup", "mode": "email_password"})
     return {"ok": True, "authenticated": True, "email": clean_email}
 
@@ -541,7 +563,7 @@ def login(request: Request, email: str = Form(""), password: str = Form("")):
     if not _verify_password(clean_password, str(row["password_salt"]), str(row["password_hash"])):
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
-    _set_session_user(request, int(row["id"]), clean_email, _display_name_from_email(clean_email), "")
+    _set_session_user(request, int(row["id"]), clean_email)
     track_event("access_request", {"target": "login", "mode": "email_password"})
     return {"ok": True, "authenticated": True, "email": clean_email}
 
@@ -553,7 +575,7 @@ def auth_email_continue(request: Request, email: str = Form("")):
         raise HTTPException(status_code=400, detail="Valid email is required")
 
     user_id = _get_or_create_google_user(clean_email)
-    _set_session_user(request, user_id, clean_email, _display_name_from_email(clean_email), "")
+    _set_session_user(request, user_id, clean_email)
     track_event("access_request", {"target": "continue", "mode": "email_only"})
     return {"ok": True, "authenticated": True, "email": clean_email}
 
@@ -581,14 +603,13 @@ async def auth_google_callback(request: Request):
         user_info = await client.userinfo(token=token)
 
     email = str((user_info or {}).get("email", "")).strip().lower()
+    full_name = str((user_info or {}).get("name", "")).strip()
+    picture = str((user_info or {}).get("picture", "")).strip()
     if not email:
         raise HTTPException(status_code=400, detail="Google account email not available")
 
-    display_name = str((user_info or {}).get("name", "")).strip() or _display_name_from_email(email)
-    avatar_url = str((user_info or {}).get("picture", "")).strip()
-
     user_id = _get_or_create_google_user(email)
-    _set_session_user(request, user_id, email, display_name, avatar_url)
+    _set_session_user(request, user_id, email, name=full_name, picture=picture)
     track_event("access_request", {"target": "login", "mode": "google_oauth"})
     next_url = str(request.session.pop("auth_next", "/"))
     return RedirectResponse(url=next_url, status_code=303)
@@ -599,7 +620,7 @@ def auth_logout(request: Request):
     request.session.pop("user_id", None)
     request.session.pop("user_email", None)
     request.session.pop("user_name", None)
-    request.session.pop("user_avatar", None)
+    request.session.pop("user_picture", None)
     return {"ok": True}
 
 

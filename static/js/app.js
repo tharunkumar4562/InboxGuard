@@ -13,10 +13,8 @@ const authCreateButton = document.getElementById("auth-create");
 const authCloseButton = document.getElementById("auth-close");
 const authEmailInput = document.getElementById("auth-email");
 const profileLink = document.getElementById("profile-link");
-const profileBadge = document.getElementById("profile-badge");
-const profileName = document.getElementById("profile-name");
-const profileEmail = document.getElementById("profile-email");
-const topbarAccountLink = document.getElementById("topbar-account-link");
+const profileAvatar = document.getElementById("profile-avatar");
+const profileInitial = document.getElementById("profile-initial");
 
 const rawEmailInput = document.getElementById("raw-email");
 const domainInput = document.getElementById("domain");
@@ -82,9 +80,9 @@ let anonymousScansUsed = Number(localStorage.getItem("ig_anon_scans_used") || "0
 let anonymousScansLimit = Number(localStorage.getItem("ig_anon_scans_limit") || "3");
 let userScansUsed = 0;
 let userScansLimit = 50;
-let authEmail = "";
-let authName = "";
-let authInitials = "IG";
+let currentUserName = "";
+let currentUserEmail = "";
+let currentUserAvatar = "";
 
 const errorBanner = document.createElement("div");
 errorBanner.id = "error-banner";
@@ -133,41 +131,38 @@ function needsAuthGate(action) {
     return action === "analyze" && anonymousScansUsed >= anonymousScansLimit;
 }
 
-function computeInitials(nameOrEmail) {
-    const source = String(nameOrEmail || "").trim();
-    if (!source) {
-        return "IG";
-    }
-    const parts = source.includes("@")
-        ? source.split("@")[0].split(/[._-]+/).filter(Boolean)
-        : source.split(/\s+/).filter(Boolean);
-    if (!parts.length) {
-        return "IG";
-    }
-    if (parts.length === 1) {
-        return parts[0].slice(0, 2).toUpperCase();
-    }
-    return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
-}
-
-function renderProfileChip() {
-    if (!profileLink || !profileBadge || !profileName || !profileEmail || !topbarAccountLink) {
+function updateProfileNav() {
+    if (!profileLink) {
         return;
     }
 
     if (!isAuthenticated) {
         profileLink.classList.add("hidden");
-        topbarAccountLink.textContent = "Get Access";
-        topbarAccountLink.href = "/?auth=1";
         return;
     }
 
     profileLink.classList.remove("hidden");
-    profileBadge.textContent = authInitials || computeInitials(authName || authEmail);
-    profileName.textContent = authName || "InboxGuard User";
-    profileEmail.textContent = authEmail || "Signed in";
-    topbarAccountLink.textContent = "Profile";
-    topbarAccountLink.href = "/account";
+    const source = currentUserName || currentUserEmail || "U";
+    const initial = String(source).trim().charAt(0).toUpperCase() || "U";
+
+    if (profileInitial) {
+        profileInitial.textContent = initial;
+    }
+
+    if (profileAvatar) {
+        if (currentUserAvatar) {
+            profileAvatar.src = currentUserAvatar;
+            profileAvatar.classList.remove("hidden");
+            if (profileInitial) {
+                profileInitial.classList.add("hidden");
+            }
+        } else {
+            profileAvatar.classList.add("hidden");
+            if (profileInitial) {
+                profileInitial.classList.remove("hidden");
+            }
+        }
+    }
 }
 
 async function refreshAuthStatus() {
@@ -178,9 +173,9 @@ async function refreshAuthStatus() {
         }
         const data = await response.json();
         isAuthenticated = Boolean(data && data.authenticated);
-        authEmail = String(data && data.email ? data.email : "");
-        authName = String(data && data.name ? data.name : "");
-        authInitials = String(data && data.initials ? data.initials : computeInitials(authName || authEmail));
+        currentUserName = String(data && data.name ? data.name : "");
+        currentUserEmail = String(data && data.email ? data.email : "");
+        currentUserAvatar = String(data && data.avatar_url ? data.avatar_url : "");
         anonymousScansUsed = Number(data && data.anonymous_scans_used ? data.anonymous_scans_used : 0);
         anonymousScansLimit = Number(data && data.anonymous_scans_limit ? data.anonymous_scans_limit : 3);
         userScansUsed = Number(data && data.user_scans_used ? data.user_scans_used : 0);
@@ -188,7 +183,7 @@ async function refreshAuthStatus() {
 
         localStorage.setItem("ig_anon_scans_used", String(anonymousScansUsed));
         localStorage.setItem("ig_anon_scans_limit", String(anonymousScansLimit));
-        renderProfileChip();
+        updateProfileNav();
     } catch (error) {
         // Keep UI operational even if auth status endpoint is temporarily unavailable.
     }
@@ -271,7 +266,7 @@ function openAuthModalFromQueryIfNeeded() {
 function onAuthSuccess(source) {
     isAuthenticated = true;
     hideAuthModal();
-    renderProfileChip();
+    updateProfileNav();
 
     const payload = new FormData();
     payload.set("event", "access_request");
@@ -1100,7 +1095,6 @@ if (form) {
 
 setIdleState();
 activateTab("dashboard");
-renderProfileChip();
 refreshAuthStatus().then(() => {
     resumePendingAfterAuthIfNeeded();
     openAuthModalFromQueryIfNeeded();

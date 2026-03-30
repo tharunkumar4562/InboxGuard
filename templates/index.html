@@ -63,12 +63,11 @@
           <button class="nav-item disabled" type="button">Results <span>Coming soon</span></button>
           <button class="nav-item disabled" type="button">Reports <span>Coming soon</span></button>
         </nav>
-        <a id="profile-link" class="profile-link hidden" href="/account" aria-label="Open account profile">
-          <span id="profile-badge" class="profile-badge">IG</span>
-          <span class="profile-meta">
-            <strong id="profile-name">Guest</strong>
-            <small id="profile-email">Sign in to view account</small>
-          </span>
+
+        <a id="profile-link" class="profile-link hidden" href="/profile" aria-label="Open profile">
+          <img id="profile-avatar" class="profile-avatar" src="/static/favicon-48.png" alt="Profile avatar" />
+          <span id="profile-initial" class="profile-initial">U</span>
+          <span class="profile-label">Profile</span>
         </a>
       </aside>
 
@@ -77,7 +76,7 @@
           <h1>InboxGuard</h1>
           <div class="topbar-actions">
             <button id="start-btn" type="button" class="start-btn">Start</button>
-            <a id="topbar-account-link" class="access-link" href="/?auth=1">Get Access</a>
+            <a class="access-link" href="/access">Get Access</a>
           </div>
         </header>
         <section class="hero-story card">
@@ -291,6 +290,6 @@ Only 1 day left to register..."></textarea>
       </div>
     </div>
 
-    <script src="/static/js/app.js?v=20260330-4"></script>
+    <script src="/static/js/app.js?v=20260330-5"></script>
   </body>
 </html>
