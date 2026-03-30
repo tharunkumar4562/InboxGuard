@@ -513,7 +513,7 @@ def auth_email_continue(request: Request, email: str = Form("")):
 async def auth_google_login(request: Request, next: str = "/?resume=1"):
     client = _google_client()
     if client is None:
-        raise HTTPException(status_code=503, detail="Google OAuth is not configured")
+        return RedirectResponse(url="/?auth=1&google_not_configured=1", status_code=303)
 
     request.session["auth_next"] = next
     redirect_uri = f"{SITE_URL}/auth/google/callback"
@@ -524,7 +524,7 @@ async def auth_google_login(request: Request, next: str = "/?resume=1"):
 async def auth_google_callback(request: Request):
     client = _google_client()
     if client is None:
-        raise HTTPException(status_code=503, detail="Google OAuth is not configured")
+        return RedirectResponse(url="/?auth=1&google_not_configured=1", status_code=303)
 
     token = await client.authorize_access_token(request)
     user_info = token.get("userinfo") if isinstance(token, dict) else None

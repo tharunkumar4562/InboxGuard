@@ -77,6 +77,7 @@ let anonymousScansUsed = Number(localStorage.getItem("ig_anon_scans_used") || "0
 let anonymousScansLimit = Number(localStorage.getItem("ig_anon_scans_limit") || "3");
 let userScansUsed = 0;
 let userScansLimit = 50;
+let googleEnabled = false;
 
 const errorBanner = document.createElement("div");
 errorBanner.id = "error-banner";
@@ -137,6 +138,7 @@ async function refreshAuthStatus() {
         anonymousScansLimit = Number(data && data.anonymous_scans_limit ? data.anonymous_scans_limit : 3);
         userScansUsed = Number(data && data.user_scans_used ? data.user_scans_used : 0);
         userScansLimit = Number(data && data.user_scans_limit ? data.user_scans_limit : 50);
+        googleEnabled = Boolean(data && data.google_enabled);
 
         localStorage.setItem("ig_anon_scans_used", String(anonymousScansUsed));
         localStorage.setItem("ig_anon_scans_limit", String(anonymousScansLimit));
@@ -210,11 +212,15 @@ function resumePendingAfterAuthIfNeeded() {
 function openAuthModalFromQueryIfNeeded() {
     const params = new URLSearchParams(window.location.search);
     const shouldOpen = params.get("auth") === "1";
+    const googleMissing = params.get("google_not_configured") === "1";
     if (!shouldOpen) {
         return;
     }
 
     showAuthModal();
+    if (googleMissing) {
+        showError("Google Sign-In is not configured yet. Use Continue with Email now, then set Google env vars.");
+    }
     const cleanUrl = window.location.pathname + window.location.hash;
     window.history.replaceState({}, document.title, cleanUrl);
 }
@@ -257,6 +263,13 @@ async function continueWithEmail() {
 }
 
 async function continueWithGoogle() {
+    await refreshAuthStatus();
+    if (!googleEnabled) {
+        showAuthModal();
+        showError("Google Sign-In is not configured yet. Use Continue with Email now.");
+        return;
+    }
+
     stashPendingContext(pendingAction || "analyze");
     localStorage.setItem("ig_resume_after_auth", "1");
     const next = encodeURIComponent("/");
