@@ -24,32 +24,83 @@
 
       <main class="profile-main">
         <section class="profile-card">
-          <img class="profile-avatar-large" src="{{ profile.avatar_url }}" alt="{{ profile.name }}" />
+          <img id="profile-avatar-live" class="profile-avatar-large" src="{{ profile.avatar_url }}" alt="{{ profile.name }}" />
           <div>
-            <h1>{{ profile.name }}</h1>
-            <p class="profile-email">{{ profile.email }}</p>
+            <h1 id="profile-name-live">{{ profile.name }}</h1>
+            <p id="profile-email-live" class="profile-email">{{ profile.email }}</p>
           </div>
         </section>
 
         <section class="profile-stats-grid">
           <article class="profile-stat-card">
             <p class="profile-stat-label">Scans Used</p>
-            <p class="profile-stat-value">{{ profile.scans_used }}</p>
+            <p id="usage-scans-used" class="profile-stat-value">{{ profile.scans_used }}</p>
           </article>
           <article class="profile-stat-card">
             <p class="profile-stat-label">Emails Scanned</p>
-            <p class="profile-stat-value">{{ profile.emails_scanned_count }}</p>
+            <p id="usage-emails-scanned" class="profile-stat-value">{{ profile.emails_scanned_count }}</p>
           </article>
           <article class="profile-stat-card">
             <p class="profile-stat-label">Rewrite Clicks</p>
-            <p class="profile-stat-value">{{ profile.rewrite_clicked }}</p>
+            <p id="usage-rewrite-clicked" class="profile-stat-value">{{ profile.rewrite_clicked }}</p>
           </article>
           <article class="profile-stat-card">
             <p class="profile-stat-label">Last Active</p>
-            <p class="profile-stat-value profile-small">{{ profile.last_active or '—' }}</p>
+            <p id="usage-last-active" class="profile-stat-value profile-small">{{ profile.last_active or '—' }}</p>
           </article>
         </section>
       </main>
     </div>
+
+    <script>
+      (function () {
+        const nameNode = document.getElementById("profile-name-live");
+        const emailNode = document.getElementById("profile-email-live");
+        const avatarNode = document.getElementById("profile-avatar-live");
+        const scansNode = document.getElementById("usage-scans-used");
+        const emailsNode = document.getElementById("usage-emails-scanned");
+        const rewriteNode = document.getElementById("usage-rewrite-clicked");
+        const lastActiveNode = document.getElementById("usage-last-active");
+
+        async function refreshProfile() {
+          try {
+            const response = await fetch("/auth/me", { method: "GET", cache: "no-store" });
+            if (!response.ok) {
+              return;
+            }
+
+            const data = await response.json();
+            const profile = (data && data.profile) || {};
+
+            if (nameNode && profile.name) {
+              nameNode.textContent = String(profile.name);
+            }
+            if (emailNode && profile.email) {
+              emailNode.textContent = String(profile.email);
+            }
+            if (avatarNode && profile.avatar_url) {
+              avatarNode.src = String(profile.avatar_url);
+            }
+            if (scansNode) {
+              scansNode.textContent = String(profile.scans_used ?? 0);
+            }
+            if (emailsNode) {
+              emailsNode.textContent = String(profile.emails_scanned_count ?? 0);
+            }
+            if (rewriteNode) {
+              rewriteNode.textContent = String(profile.rewrite_clicked ?? 0);
+            }
+            if (lastActiveNode) {
+              lastActiveNode.textContent = String(profile.last_active || "—");
+            }
+          } catch (error) {
+            // Keep page stable if refresh fails.
+          }
+        }
+
+        refreshProfile();
+        setInterval(refreshProfile, 12000);
+      })();
+    </script>
   </body>
 </html>

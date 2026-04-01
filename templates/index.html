@@ -85,44 +85,24 @@
           <p>This catches those patterns before you send, then rewrites your draft into a safer version you can actually use.</p>
           <p class="hero-note">Check before send. Protect your domain reputation.</p>
         </section>
-        <p id="tab-feedback" class="tab-feedback">Paste your draft below to scan and fix it before sending.</p>
-
-        <section class="usage-live-grid">
-          <article class="usage-live-card">
-            <p class="usage-live-label">Scans Used</p>
-            <p id="usage-scans-used" class="usage-live-value">0</p>
-          </article>
-          <article class="usage-live-card">
-            <p class="usage-live-label">Emails Scanned</p>
-            <p id="usage-emails-scanned" class="usage-live-value">0</p>
-          </article>
-          <article class="usage-live-card">
-            <p class="usage-live-label">Rewrite Clicks</p>
-            <p id="usage-rewrite-clicked" class="usage-live-value">0</p>
-          </article>
-          <article class="usage-live-card">
-            <p class="usage-live-label">Last Active</p>
-            <p id="usage-last-active" class="usage-live-value usage-live-small">Guest session</p>
-          </article>
-        </section>
+        <p id="tab-feedback" class="tab-feedback">Paste your email, click Analyze Email, and get fixes instantly.</p>
 
         <section class="scan-panel card">
           <form id="risk-form" class="scan-form">
-            <label class="input-label" for="raw-email">Paste your email draft</label>
-            <p class="micro" style="margin: 0 0 8px;">Paste your email -> Click Analyze Email -> Get fixes instantly.</p>
-            <textarea id="raw-email" name="raw_email" rows="8" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Paste your full email here (include subject + message)
+            <label class="input-label" for="raw-email">Paste The Email You Plan To Send</label>
+            <textarea id="raw-email" name="raw_email" rows="8" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Paste your email (subject + message)
 
 Example:
-Subject: Last chance to apply
+Subject: Quick question
 
 Hi John,
-Only 1 day left to register..."></textarea>
+I noticed your recent post and had one short idea to improve reply rates."></textarea>
 
-            <details class="advanced-options">
-              <summary>Advanced options (optional)</summary>
-              <div class="inline-fields" style="margin-top: 10px;">
+            <details class="secondary-options">
+              <summary>Advanced options</summary>
+              <div class="inline-fields" style="margin-top: 8px;">
                 <div>
-                  <label for="domain">Domain</label>
+                  <label for="domain">Domain (optional)</label>
                   <input id="domain" name="domain" type="text" placeholder="yourdomain.com" autocomplete="off" />
                 </div>
                 <div>
@@ -136,7 +116,7 @@ Only 1 day left to register..."></textarea>
             </details>
 
             <button type="submit" id="run-check" class="btn-danger">Analyze Email</button>
-            <p class="micro">Scannable in under 5 seconds. No signup required.</p>
+            <p class="micro">Takes 5 seconds • No signup needed for first scans</p>
 
             <div id="result-loading" class="loading-panel hidden">
               <p class="loading-title">Analyzing your email...</p>
