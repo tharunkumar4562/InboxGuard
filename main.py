@@ -1,4 +1,4 @@
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from difflib import SequenceMatcher
 from pathlib import Path
 import logging
@@ -124,6 +124,31 @@ def _ensure_auth_db() -> None:
                 scans_used INTEGER NOT NULL DEFAULT 0,
                 last_scan TEXT,
                 PRIMARY KEY (anon_id, period_key)
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS user_daily_activity (
+                user_id INTEGER NOT NULL,
+                activity_date TEXT NOT NULL,
+                scans_count INTEGER NOT NULL DEFAULT 0,
+                last_activity_at TEXT NOT NULL,
+                PRIMARY KEY (user_id, activity_date),
+                FOREIGN KEY(user_id) REFERENCES users(id)
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS user_feedback (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                outcome TEXT NOT NULL,
+                from_risk_band TEXT,
+                to_risk_band TEXT,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY(user_id) REFERENCES users(id)
             )
             """
         )
@@ -306,11 +331,109 @@ def _increment_user_scan(user_id: int) -> int:
             (user_id, now, now),
         )
         conn.execute("UPDATE users SET last_active=? WHERE id=?", (now, user_id))
+        activity_date = datetime.now(timezone.utc).date().isoformat()
+        conn.execute(
+            """
+            INSERT INTO user_daily_activity(user_id, activity_date, scans_count, last_activity_at)
+            VALUES (?, ?, 1, ?)
+            ON CONFLICT(user_id, activity_date) DO UPDATE SET
+                scans_count = scans_count + 1,
+                last_activity_at = excluded.last_activity_at
+            """,
+            (user_id, activity_date, now),
+        )
         conn.commit()
         row = conn.execute("SELECT scans_used FROM usage WHERE user_id=?", (user_id,)).fetchone()
         return int(row["scans_used"]) if row else 0
     finally:
         conn.close()
+
+
+def _record_user_feedback(user_id: int, outcome: str, from_risk_band: str, to_risk_band: str) -> None:
+    _ensure_auth_db_ready()
+    now = _now_iso()
+    conn = _auth_db_conn()
+    try:
+        conn.execute(
+            "INSERT INTO user_feedback(user_id, outcome, from_risk_band, to_risk_band, created_at) VALUES (?, ?, ?, ?, ?)",
+            (user_id, (outcome or "not_sure")[:24], (from_risk_band or "")[:80], (to_risk_band or "")[:80], now),
+        )
+        conn.execute("UPDATE users SET last_active=? WHERE id=?", (now, user_id))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _recent_user_feedback(user_id: int, limit: int = 5) -> list[dict]:
+    _ensure_auth_db_ready()
+    conn = _auth_db_conn()
+    try:
+        rows = conn.execute(
+            "SELECT outcome, from_risk_band, to_risk_band, created_at FROM user_feedback WHERE user_id=? ORDER BY id DESC LIMIT ?",
+            (user_id, limit),
+        ).fetchall()
+        result: list[dict] = []
+        for row in rows:
+            result.append(
+                {
+                    "outcome": str(row["outcome"] or "not_sure"),
+                    "from_risk_band": str(row["from_risk_band"] or ""),
+                    "to_risk_band": str(row["to_risk_band"] or ""),
+                    "created_at": str(row["created_at"] or ""),
+                }
+            )
+        return result
+    finally:
+        conn.close()
+
+
+def _user_streak_days(user_id: int) -> int:
+    _ensure_auth_db_ready()
+    conn = _auth_db_conn()
+    try:
+        rows = conn.execute(
+            "SELECT activity_date FROM user_daily_activity WHERE user_id=? ORDER BY activity_date DESC LIMIT 30",
+            (user_id,),
+        ).fetchall()
+    finally:
+        conn.close()
+
+    if not rows:
+        return 0
+
+    days = [date.fromisoformat(str(row["activity_date"])) for row in rows if row["activity_date"]]
+    if not days:
+        return 0
+
+    today = datetime.now(timezone.utc).date()
+    expected = today
+    if days[0] == today - timedelta(days=1):
+        expected = today - timedelta(days=1)
+    elif days[0] != today:
+        return 0
+
+    streak = 0
+    for day in days:
+        if day == expected:
+            streak += 1
+            expected = expected - timedelta(days=1)
+        elif day < expected:
+            break
+    return streak
+
+
+def _health_score(usage: dict, recent_results: list[dict]) -> int:
+    scans = int(usage.get("scans_used", 0))
+    rewrites = int(usage.get("rewrite_clicked", 0))
+    inbox = sum(1 for item in recent_results if item.get("outcome") == "inbox")
+    spam = sum(1 for item in recent_results if item.get("outcome") == "spam")
+
+    score = 45
+    score += min(scans * 2, 22)
+    score += min(rewrites * 1, 12)
+    score += inbox * 8
+    score -= spam * 10
+    return max(0, min(100, int(score)))
 
 
 def _increment_rewrite_clicked(user_id: int) -> None:
@@ -488,6 +611,9 @@ def auth_me(request: Request):
         raise HTTPException(status_code=401, detail="Not authenticated")
 
     usage = _get_usage(user["id"])
+    recent_results = _recent_user_feedback(user["id"], limit=5)
+    streak_days = _user_streak_days(user["id"])
+    health_score = _health_score(usage, recent_results)
     return {
         "authenticated": True,
         "profile": {
@@ -498,6 +624,9 @@ def auth_me(request: Request):
             "emails_scanned_count": usage["emails_scanned_count"],
             "rewrite_clicked": usage["rewrite_clicked"],
             "last_active": usage["last_active"],
+            "health_score": health_score,
+            "streak_days": streak_days,
+            "recent_results": recent_results,
         },
     }
 
@@ -509,6 +638,9 @@ def profile_page(request: Request):
         return RedirectResponse(url="/?auth=1", status_code=303)
 
     usage = _get_usage(user["id"])
+    recent_results = _recent_user_feedback(user["id"], limit=5)
+    streak_days = _user_streak_days(user["id"])
+    health_score = _health_score(usage, recent_results)
     profile = {
         "name": user["name"] or _display_name_from_email(user["email"]),
         "email": user["email"],
@@ -517,6 +649,9 @@ def profile_page(request: Request):
         "emails_scanned_count": usage["emails_scanned_count"],
         "rewrite_clicked": usage["rewrite_clicked"],
         "last_active": usage["last_active"],
+        "health_score": health_score,
+        "streak_days": streak_days,
+        "recent_results": recent_results,
     }
 
     return render_template_safe(
@@ -1016,6 +1151,7 @@ def rewrite_email(
 
 @app.post("/feedback")
 def submit_feedback(
+    request: Request,
     outcome: str = Form("not_sure"),
     original_text: str = Form(""),
     rewritten_text: str = Form(""),
@@ -1040,6 +1176,10 @@ def submit_feedback(
             "to_risk_band": (to_risk_band or "")[:40],
         },
     )
+
+    user = _get_session_user(request)
+    if user:
+        _record_user_feedback(user["id"], outcome, from_risk_band, to_risk_band)
 
     return result
 

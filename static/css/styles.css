@@ -948,3 +948,14 @@ select {
     font-size: 0.86rem;
     font-weight: 600;
 }
+
+#risk-fix-now {
+    box-shadow: 0 8px 24px rgba(59, 130, 246, 0.24);
+}
+
+#improvement-estimate {
+    background: rgba(16, 185, 129, 0.12);
+    border: 1px solid rgba(16, 185, 129, 0.4);
+    border-radius: 10px;
+    padding: 8px 10px;
+}

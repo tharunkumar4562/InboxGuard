@@ -33,6 +33,14 @@
 
         <section class="profile-stats-grid">
           <article class="profile-stat-card">
+            <p class="profile-stat-label">Email Health Score</p>
+            <p id="usage-health-score" class="profile-stat-value">{{ profile.health_score or 0 }}</p>
+          </article>
+          <article class="profile-stat-card">
+            <p class="profile-stat-label">Current Streak</p>
+            <p id="usage-streak-days" class="profile-stat-value">{{ profile.streak_days or 0 }} day(s)</p>
+          </article>
+          <article class="profile-stat-card">
             <p class="profile-stat-label">Scans Used</p>
             <p id="usage-scans-used" class="profile-stat-value">{{ profile.scans_used }}</p>
           </article>
@@ -49,6 +57,19 @@
             <p id="usage-last-active" class="profile-stat-value profile-small">{{ profile.last_active or '—' }}</p>
           </article>
         </section>
+
+        <section class="profile-stat-card">
+          <p class="profile-stat-label">Recent Outcomes</p>
+          <ul id="usage-recent-results" class="compact-list" style="margin-top: 8px;">
+            {% if profile.recent_results %}
+              {% for item in profile.recent_results %}
+              <li>{{ item.outcome|capitalize }} • {{ item.to_risk_band or item.from_risk_band or 'No band' }}</li>
+              {% endfor %}
+            {% else %}
+              <li>No feedback yet. Send outcomes to improve prediction quality.</li>
+            {% endif %}
+          </ul>
+        </section>
       </main>
     </div>
 
@@ -58,9 +79,12 @@
         const emailNode = document.getElementById("profile-email-live");
         const avatarNode = document.getElementById("profile-avatar-live");
         const scansNode = document.getElementById("usage-scans-used");
+        const healthNode = document.getElementById("usage-health-score");
+        const streakNode = document.getElementById("usage-streak-days");
         const emailsNode = document.getElementById("usage-emails-scanned");
         const rewriteNode = document.getElementById("usage-rewrite-clicked");
         const lastActiveNode = document.getElementById("usage-last-active");
+        const recentResultsNode = document.getElementById("usage-recent-results");
 
         async function refreshProfile() {
           try {
@@ -84,6 +108,12 @@
             if (scansNode) {
               scansNode.textContent = String(profile.scans_used ?? 0);
             }
+            if (healthNode) {
+              healthNode.textContent = String(profile.health_score ?? 0);
+            }
+            if (streakNode) {
+              streakNode.textContent = `${String(profile.streak_days ?? 0)} day(s)`;
+            }
             if (emailsNode) {
               emailsNode.textContent = String(profile.emails_scanned_count ?? 0);
             }
@@ -92,6 +122,23 @@
             }
             if (lastActiveNode) {
               lastActiveNode.textContent = String(profile.last_active || "—");
+            }
+            if (recentResultsNode) {
+              const list = Array.isArray(profile.recent_results) ? profile.recent_results : [];
+              recentResultsNode.innerHTML = "";
+              if (!list.length) {
+                const li = document.createElement("li");
+                li.textContent = "No feedback yet. Send outcomes to improve prediction quality.";
+                recentResultsNode.appendChild(li);
+              } else {
+                list.slice(0, 5).forEach(function (item) {
+                  const li = document.createElement("li");
+                  const outcome = String(item && item.outcome ? item.outcome : "not_sure");
+                  const band = String(item && (item.to_risk_band || item.from_risk_band || "No band"));
+                  li.textContent = `${outcome.charAt(0).toUpperCase()}${outcome.slice(1)} • ${band}`;
+                  recentResultsNode.appendChild(li);
+                });
+              }
             }
           } catch (error) {
             // Keep page stable if refresh fails.

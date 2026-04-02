@@ -34,6 +34,7 @@ const biggestRiskTitleNode = document.getElementById("biggest-risk-title");
 const biggestRiskImpactNode = document.getElementById("biggest-risk-impact");
 const biggestRiskDescNode = document.getElementById("biggest-risk-desc");
 const trustHookNode = document.getElementById("trust-hook");
+const riskFixNowButton = document.getElementById("risk-fix-now");
 
 const consequenceListNode = document.getElementById("consequence-list");
 const hurtListNode = document.getElementById("hurt-list");
@@ -56,6 +57,7 @@ const beforeEmailNode = document.getElementById("before-email");
 const afterEmailNode = document.getElementById("after-email");
 const useFixedButton = document.getElementById("use-fixed");
 const restoreOriginalButton = document.getElementById("restore-original");
+const sendGmailButton = document.getElementById("send-gmail");
 const editManualButton = document.getElementById("edit-manual");
 const feedbackInboxButton = document.getElementById("feedback-inbox");
 const feedbackSpamButton = document.getElementById("feedback-spam");
@@ -604,8 +606,19 @@ function renderHurting(findings) {
 
     nonMeta.slice(0, 3).forEach((item) => {
         const li = document.createElement("li");
-        const sev = String(item.severity || "medium").toUpperCase();
-        li.textContent = `${item.title || "Risk"} (${sev})`;
+        const title = String(item.title || "Risk");
+        const low = title.toLowerCase();
+        if (low.includes("urgency") || low.includes("pressure")) {
+            li.textContent = `\"Only 1 day left\" style language is a spam trigger for Gmail filters.`;
+        } else if (low.includes("broadcast") || low.includes("mass")) {
+            li.textContent = "This reads like a mass campaign and lowers trust/reply rates.";
+        } else if (low.includes("personalization")) {
+            li.textContent = "Low personalization makes this look promotional instead of 1:1 outreach.";
+        } else if (low.includes("spf") || low.includes("dkim") || low.includes("dmarc")) {
+            li.textContent = "Authentication gaps can push this to spam even with good copy.";
+        } else {
+            li.textContent = `${title} can reduce inbox placement if not fixed.`;
+        }
         hurtListNode.appendChild(li);
     });
 }
@@ -757,7 +770,7 @@ async function showFixTransformation() {
         if (improvementEstimateNode) {
             const delta = Number(data.score_delta || 0);
             if (rewriteOutcome === "improved") {
-                improvementEstimateNode.textContent = `Risk shift: ${data.from_risk_band} -> ${data.to_risk_band} | Score delta: ${delta >= 0 ? "+" : ""}${delta}`;
+                improvementEstimateNode.textContent = `✅ Spam Risk Reduced | Deliverability Score: ${delta >= 0 ? "+" : ""}${delta} | Higher chance of inbox placement`;
             } else if (rewriteOutcome === "failed_fix") {
                 improvementEstimateNode.textContent = "Could not safely remove all pressure signals without changing core intent. Use this draft as a base and refine further.";
             } else {
@@ -946,8 +959,14 @@ function useFixedVersion() {
     if (!afterEmailNode || !rawEmailInput) {
         return;
     }
-    rawEmailInput.value = afterEmailNode.textContent || rawEmailInput.value;
-    showError("Fixed version applied to editor. Re-scan before send.");
+    const text = String(afterEmailNode.textContent || rawEmailInput.value || "");
+    navigator.clipboard.writeText(text).then(() => {
+        rawEmailInput.value = text;
+        showError("Copied fixed email. You can paste directly into your sender.");
+    }).catch(() => {
+        rawEmailInput.value = text;
+        showError("Fixed version ready. Clipboard blocked, but draft is updated in editor.");
+    });
 }
 
 function restoreOriginalDraft() {
@@ -964,6 +983,17 @@ function editManually() {
     }
     rawEmailInput.focus();
     showError("Manual edit mode active.");
+}
+
+function openInGmail() {
+    const bodyText = String(afterEmailNode && afterEmailNode.textContent ? afterEmailNode.textContent : rawEmailInput.value || "");
+    if (!bodyText.trim()) {
+        showError("Generate or paste an email first.");
+        return;
+    }
+
+    const composeUrl = `https://mail.google.com/mail/?view=cm&fs=1&body=${encodeURIComponent(bodyText)}`;
+    window.open(composeUrl, "_blank", "noopener");
 }
 
 async function sendFeedback(outcome) {
@@ -1026,8 +1056,17 @@ if (fixNowButton) {
         runPendingAction();
     });
 }
+if (riskFixNowButton) {
+    riskFixNowButton.addEventListener("click", () => {
+        pendingAction = "fix";
+        runPendingAction();
+    });
+}
 if (useFixedButton) {
     useFixedButton.addEventListener("click", useFixedVersion);
+}
+if (sendGmailButton) {
+    sendGmailButton.addEventListener("click", openInGmail);
 }
 if (restoreOriginalButton) {
     restoreOriginalButton.addEventListener("click", restoreOriginalDraft);
