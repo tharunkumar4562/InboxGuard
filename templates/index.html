@@ -168,6 +168,7 @@ I noticed your recent post and had one short idea to improve reply rates."></tex
               <span id="biggest-risk-impact" class="badge badge-yellow">PENDING</span>
               <span id="biggest-risk-desc" class="issue-desc">Run analysis to detect the top deliverability blocker.</span>
             </div>
+            <button id="risk-fix-now" type="button" class="btn-primary" style="margin-top: 10px;">Fix This Email Now</button>
             <p id="trust-hook" class="trust-hook">Based on patterns commonly flagged by Gmail and Outlook filters.</p>
           </section>
 
@@ -183,9 +184,9 @@ I noticed your recent post and had one short idea to improve reply rates."></tex
               <div>
                 <label for="rewrite-style">Rewrite Style</label>
                 <select id="rewrite-style" name="rewrite_style">
-                  <option value="safe">Safe (keeps more detail)</option>
-                  <option value="balanced" selected>Balanced (best mix)</option>
-                  <option value="aggressive">Aggressive (max reply rate)</option>
+                  <option value="safe" selected>Safe (best for avoiding spam)</option>
+                  <option value="balanced">Balanced (best for normal outreach)</option>
+                  <option value="aggressive">Aggressive (max replies, slightly riskier)</option>
                 </select>
               </div>
             </div>
@@ -208,7 +209,7 @@ I noticed your recent post and had one short idea to improve reply rates."></tex
           </section>
 
           <details class="card advanced-block">
-            <summary>Advanced evidence (scoring math)</summary>
+            <summary>Why this was flagged (advanced)</summary>
             <div class="advanced-content">
               <article class="card">
                 <h3>Score Breakdown</h3>
@@ -251,8 +252,8 @@ I noticed your recent post and had one short idea to improve reply rates."></tex
               <li>Final placement still depends on domain reputation, list quality, and send behavior.</li>
             </ul>
             <div class="actions" style="margin-top: 12px;">
-              <button id="use-fixed" type="button" class="btn-primary">Use Fixed Version</button>
-              <button id="restore-original" type="button" class="btn-secondary">Restore Original Draft</button>
+              <button id="use-fixed" type="button" class="btn-primary">Copy Fixed Email</button>
+              <button id="send-gmail" type="button" class="btn-secondary">Open in Gmail</button>
               <button id="edit-manual" type="button" class="btn-secondary">Edit Manually</button>
             </div>
             <div class="feedback-row" style="margin-top: 12px;">
@@ -264,6 +265,39 @@ I noticed your recent post and had one short idea to improve reply rates."></tex
               </div>
             </div>
           </section>
+        </section>
+
+        <section class="card" id="campaign-debugger" style="margin-top: 12px;">
+          <h3>Campaign Failure Debugger</h3>
+          <p class="micro">Sent a campaign already? Enter outcomes to diagnose whether failure is deliverability, copy, or targeting.</p>
+          <div class="inline-fields" style="margin-top: 10px;">
+            <div>
+              <label for="metric-open-rate">Open Rate (%)</label>
+              <input id="metric-open-rate" type="number" min="0" max="100" step="0.1" placeholder="e.g. 22.5" />
+            </div>
+            <div>
+              <label for="metric-reply-rate">Reply Rate (%)</label>
+              <input id="metric-reply-rate" type="number" min="0" max="100" step="0.1" placeholder="e.g. 1.8" />
+            </div>
+          </div>
+          <div class="inline-fields" style="margin-top: 8px;">
+            <div>
+              <label for="metric-bounce-rate">Bounce Rate (%)</label>
+              <input id="metric-bounce-rate" type="number" min="0" max="100" step="0.1" placeholder="e.g. 4.2" />
+            </div>
+            <div>
+              <label for="metric-sent-count">Emails Sent</label>
+              <input id="metric-sent-count" type="number" min="1" step="1" placeholder="e.g. 500" />
+            </div>
+          </div>
+          <button id="run-diagnosis" type="button" class="btn-danger" style="margin-top: 10px;">Diagnose Campaign Failure</button>
+
+          <div id="diagnosis-output" class="card hidden" style="margin-top: 12px; background: #0f1d31;">
+            <p id="diagnosis-primary" class="main-issue">-</p>
+            <p id="diagnosis-confidence" class="micro">-</p>
+            <p id="diagnosis-why" class="micro">-</p>
+            <ul id="diagnosis-actions" class="compact-list"></ul>
+          </div>
         </section>
       </main>
     </div>
@@ -284,6 +318,6 @@ I noticed your recent post and had one short idea to improve reply rates."></tex
       </div>
     </div>
 
-    <script src="/static/js/app.js?v=20260402-1"></script>
+    <script src="/static/js/app.js?v=20260402-2"></script>
   </body>
 </html>

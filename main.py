@@ -913,6 +913,79 @@ def analyze(
     return result
 
 
+@app.post("/diagnose-campaign")
+def diagnose_campaign(
+    open_rate: float = Form(0.0),
+    reply_rate: float = Form(0.0),
+    bounce_rate: float = Form(0.0),
+    sent_count: int = Form(0),
+):
+    o = max(0.0, min(100.0, float(open_rate or 0.0)))
+    r = max(0.0, min(100.0, float(reply_rate or 0.0)))
+    b = max(0.0, min(100.0, float(bounce_rate or 0.0)))
+    sent = max(0, int(sent_count or 0))
+
+    diagnosis = "Mixed issue"
+    confidence = "medium"
+    why = "Signals are mixed. Start with highest-impact fixes below and re-test on a smaller batch."
+    actions: list[str] = [
+        "Run a 50-email controlled test after each fix to isolate impact.",
+        "Reduce links and heavy CTA pressure in first-touch emails.",
+        "Validate SPF, DKIM, and DMARC alignment for sending domain.",
+    ]
+
+    if b >= 5.0:
+        diagnosis = "List quality / deliverability issue"
+        confidence = "high"
+        why = "Bounce rate is elevated, which usually indicates invalid contacts or sender trust issues."
+        actions = [
+            "Clean the list immediately: remove invalid and risky addresses.",
+            "Pause high-volume sends until bounce rate drops below 3%.",
+            "Verify domain authentication and sending reputation before next batch.",
+        ]
+    elif o < 30.0:
+        diagnosis = "Deliverability issue"
+        confidence = "high"
+        why = "Low open rate usually indicates inbox placement problems rather than copy quality."
+        actions = [
+            "Check SPF, DKIM, and DMARC alignment first.",
+            "Reduce suspicious patterns: urgency phrases, too many links, promotional tone.",
+            "Warm domain gradually and test with smaller sends before scaling.",
+        ]
+    elif o >= 40.0 and r < 2.0:
+        diagnosis = "Copy / targeting issue"
+        confidence = "high"
+        why = "Healthy opens but weak replies suggest the message or audience fit is off."
+        actions = [
+            "Rewrite first two lines for relevance to recipient context.",
+            "Use one low-pressure CTA with a clear, specific ask.",
+            "Tighten ICP targeting and segment by persona before next send.",
+        ]
+    elif o >= 30.0 and o < 40.0 and r < 2.0:
+        diagnosis = "Mixed deliverability + copy issue"
+        confidence = "medium"
+        why = "Both opens and replies are under target, suggesting placement and message friction together."
+        actions = [
+            "Fix technical/authentication baseline first.",
+            "Then test a safer subject line and simpler body copy.",
+            "Compare control vs rewritten variant on equal audience slices.",
+        ]
+
+    return {
+        "ok": True,
+        "diagnosis": diagnosis,
+        "confidence": confidence,
+        "why": why,
+        "actions": actions,
+        "inputs": {
+            "open_rate": o,
+            "reply_rate": r,
+            "bounce_rate": b,
+            "sent_count": sent,
+        },
+    }
+
+
 def _risk_rank(band: str) -> int:
     normalized = str(band or "").strip().lower()
     if "high" in normalized:

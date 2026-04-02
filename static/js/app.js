@@ -62,6 +62,16 @@ const editManualButton = document.getElementById("edit-manual");
 const feedbackInboxButton = document.getElementById("feedback-inbox");
 const feedbackSpamButton = document.getElementById("feedback-spam");
 const feedbackUnsureButton = document.getElementById("feedback-unsure");
+const metricOpenRateInput = document.getElementById("metric-open-rate");
+const metricReplyRateInput = document.getElementById("metric-reply-rate");
+const metricBounceRateInput = document.getElementById("metric-bounce-rate");
+const metricSentCountInput = document.getElementById("metric-sent-count");
+const runDiagnosisButton = document.getElementById("run-diagnosis");
+const diagnosisOutput = document.getElementById("diagnosis-output");
+const diagnosisPrimaryNode = document.getElementById("diagnosis-primary");
+const diagnosisConfidenceNode = document.getElementById("diagnosis-confidence");
+const diagnosisWhyNode = document.getElementById("diagnosis-why");
+const diagnosisActionsNode = document.getElementById("diagnosis-actions");
 
 const loadSteps = [
     "Checking content signals...",
@@ -1026,6 +1036,54 @@ async function sendFeedback(outcome) {
     }
 }
 
+async function runCampaignDiagnosis() {
+    const openRate = Number(metricOpenRateInput && metricOpenRateInput.value ? metricOpenRateInput.value : 0);
+    const replyRate = Number(metricReplyRateInput && metricReplyRateInput.value ? metricReplyRateInput.value : 0);
+    const bounceRate = Number(metricBounceRateInput && metricBounceRateInput.value ? metricBounceRateInput.value : 0);
+    const sentCount = Number(metricSentCountInput && metricSentCountInput.value ? metricSentCountInput.value : 0);
+
+    const payload = new FormData();
+    payload.set("open_rate", String(openRate));
+    payload.set("reply_rate", String(replyRate));
+    payload.set("bounce_rate", String(bounceRate));
+    payload.set("sent_count", String(sentCount));
+
+    const response = await fetch("/diagnose-campaign", {
+        method: "POST",
+        body: payload,
+    });
+
+    if (!response.ok) {
+        throw new Error("Could not diagnose campaign.");
+    }
+
+    const data = await response.json();
+    if (!diagnosisOutput || !diagnosisPrimaryNode || !diagnosisConfidenceNode || !diagnosisWhyNode || !diagnosisActionsNode) {
+        return;
+    }
+
+    diagnosisPrimaryNode.textContent = `Diagnosis: ${String(data.diagnosis || "Mixed issue")}`;
+    diagnosisConfidenceNode.textContent = `Confidence: ${String(data.confidence || "medium").toUpperCase()}`;
+    diagnosisWhyNode.textContent = String(data.why || "No diagnosis details available.");
+
+    diagnosisActionsNode.innerHTML = "";
+    const actions = Array.isArray(data.actions) ? data.actions : [];
+    if (!actions.length) {
+        const li = document.createElement("li");
+        li.textContent = "No action list returned.";
+        diagnosisActionsNode.appendChild(li);
+    } else {
+        actions.slice(0, 4).forEach((action, idx) => {
+            const li = document.createElement("li");
+            li.textContent = `${idx + 1}. ${String(action)}`;
+            diagnosisActionsNode.appendChild(li);
+        });
+    }
+
+    diagnosisOutput.classList.remove("hidden");
+    diagnosisOutput.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
 if (dashboardTab) {
     dashboardTab.addEventListener("click", () => activateTab("dashboard"));
 }
@@ -1082,6 +1140,13 @@ if (feedbackSpamButton) {
 }
 if (feedbackUnsureButton) {
     feedbackUnsureButton.addEventListener("click", () => sendFeedback("not_sure"));
+}
+if (runDiagnosisButton) {
+    runDiagnosisButton.addEventListener("click", () => {
+        runCampaignDiagnosis().catch((error) => {
+            showError(error && error.message ? error.message : "Could not diagnose campaign.");
+        });
+    });
 }
 if (authSignInButton) {
     authSignInButton.addEventListener("click", () => handleAuthAction("signin"));
