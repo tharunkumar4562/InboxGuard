@@ -28,9 +28,9 @@ const statusRiskCardNode = document.getElementById("status-risk-card");
 const statusPrimaryIssueNode = document.getElementById("status-primary-issue");
 const statusConfidenceNode = document.getElementById("status-confidence");
 const statusInfraNode = document.getElementById("status-infra");
+const riskStripNode = document.getElementById("risk-strip");
 const decisionProblemNode = document.getElementById("decision-problem");
-const decisionConfidenceNode = document.getElementById("decision-confidence");
-const predictedFailureNode = document.getElementById("predicted-failure");
+const decisionSignalNode = document.getElementById("decision-signal");
 const decisionWhyNode = document.getElementById("decision-why");
 const decisionFixFirstNode = document.getElementById("decision-fix-first");
 const decisionConsequenceNode = document.getElementById("decision-consequence");
@@ -712,34 +712,39 @@ function renderBreakdown(summary) {
 }
 
 function renderDecisionEngine(summary, signals, findings) {
-    if (!decisionProblemNode || !decisionConfidenceNode || !predictedFailureNode || !decisionWhyNode || !decisionFixFirstNode || !decisionConsequenceNode) {
+    if (!decisionProblemNode || !decisionSignalNode || !decisionWhyNode || !decisionFixFirstNode || !decisionConsequenceNode || !riskStripNode) {
         return;
     }
 
     const band = String(summary.risk_band || "Needs Review");
-    const confidence = String(summary.deliverability_confidence || "medium");
     const spf = String(signals.spf_status || "unknown");
     const dkim = String(signals.dkim_status || "unknown");
     const dmarc = String(signals.dmarc_status || "unknown");
     const infraWeak = !(spf === "found" && dkim === "found" && dmarc === "found");
 
     let problem = "Problem: Moderate risk";
+    let strip = "⚠️ MEDIUM RISK — REVIEW BEFORE SENDING";
+    let stripClass = "risk-strip risk-strip-medium";
     if (band === "High Spam-Risk Signals" || band === "High Risk") {
         problem = "🚨 Problem: Likely Spam (Deliverability Issue)";
+        strip = "🚨 HIGH RISK — WILL LIKELY GO TO SPAM";
+        stripClass = "risk-strip risk-strip-high";
     } else if (band === "Content Safe") {
         problem = "✅ Problem: Low immediate risk";
+        strip = "✅ LOW RISK — SAFE TO SEND WITH MINOR REVIEW";
+        stripClass = "risk-strip risk-strip-low";
     }
     decisionProblemNode.textContent = problem;
+    riskStripNode.textContent = strip;
+    riskStripNode.className = stripClass;
 
-    decisionConfidenceNode.textContent = `Confidence: ${confidence.charAt(0).toUpperCase()}${confidence.slice(1)}`;
-
-    let predictedFailure = "Predicted failure type: Mixed issue";
+    let signalLine = "Multiple spam signals detected — fix order below is prioritized by impact.";
     if (infraWeak || band.includes("High")) {
-        predictedFailure = "Predicted failure type: Deliverability";
+        signalLine = "Multiple spam signals detected, including technical/placement risk.";
     } else if (String(summary.primary_issue || "").toLowerCase().includes("cta") || String(summary.primary_issue || "").toLowerCase().includes("personal")) {
-        predictedFailure = "Predicted failure type: Copy/Targeting";
+        signalLine = "Message-level risk signals detected (copy/targeting pressure).";
     }
-    predictedFailureNode.textContent = predictedFailure;
+    decisionSignalNode.textContent = signalLine;
 
     const nonMeta = (findings || []).filter((f) => !String(f.title || "").toLowerCase().includes("analysis mode"));
     decisionWhyNode.innerHTML = "";
@@ -762,8 +767,8 @@ function renderDecisionEngine(summary, signals, findings) {
     decisionConsequenceNode.innerHTML = "";
     const consequences = (band === "High Spam-Risk Signals" || band === "High Risk")
         ? [
-            "High chance of spam placement if sent unchanged.",
-            "Domain reputation can degrade after repeated sends.",
+            "High chance this lands in spam if sent unchanged.",
+            "Future campaign performance will degrade as domain reputation drops.",
         ]
         : [
             "This can still underperform if key issues are ignored.",

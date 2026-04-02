@@ -625,6 +625,40 @@ select {
     font-size: 0.84rem;
 }
 
+.risk-strip {
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 0.92rem;
+    font-weight: 800;
+    letter-spacing: 0.03em;
+    margin-bottom: 10px;
+    border: 1px solid transparent;
+}
+
+.risk-strip-high {
+    background: #3f1519;
+    border-color: #7f1d1d;
+    color: #fecaca;
+}
+
+.risk-strip-medium {
+    background: #392a12;
+    border-color: #78350f;
+    color: #fde68a;
+}
+
+.risk-strip-low {
+    background: #123426;
+    border-color: #065f46;
+    color: #a7f3d0;
+}
+
+.risk-strip-neutral {
+    background: #1f2937;
+    border-color: #334155;
+    color: #cbd5e1;
+}
+
 .consequence-panel {
     border-color: #78350f;
     background: #20190f;
