@@ -28,6 +28,12 @@ const statusRiskCardNode = document.getElementById("status-risk-card");
 const statusPrimaryIssueNode = document.getElementById("status-primary-issue");
 const statusConfidenceNode = document.getElementById("status-confidence");
 const statusInfraNode = document.getElementById("status-infra");
+const decisionProblemNode = document.getElementById("decision-problem");
+const decisionConfidenceNode = document.getElementById("decision-confidence");
+const predictedFailureNode = document.getElementById("predicted-failure");
+const decisionWhyNode = document.getElementById("decision-why");
+const decisionFixFirstNode = document.getElementById("decision-fix-first");
+const decisionConsequenceNode = document.getElementById("decision-consequence");
 
 const biggestRiskCard = document.getElementById("biggest-risk-card");
 const biggestRiskTitleNode = document.getElementById("biggest-risk-title");
@@ -704,6 +710,79 @@ function renderBreakdown(summary) {
         scoreBreakdownNode.appendChild(li);
     });
 }
+
+function renderDecisionEngine(summary, signals, findings) {
+    if (!decisionProblemNode || !decisionConfidenceNode || !predictedFailureNode || !decisionWhyNode || !decisionFixFirstNode || !decisionConsequenceNode) {
+        return;
+    }
+
+    const band = String(summary.risk_band || "Needs Review");
+    const confidence = String(summary.deliverability_confidence || "medium");
+    const spf = String(signals.spf_status || "unknown");
+    const dkim = String(signals.dkim_status || "unknown");
+    const dmarc = String(signals.dmarc_status || "unknown");
+    const infraWeak = !(spf === "found" && dkim === "found" && dmarc === "found");
+
+    let problem = "Problem: Moderate risk";
+    if (band === "High Spam-Risk Signals" || band === "High Risk") {
+        problem = "🚨 Problem: Likely Spam (Deliverability Issue)";
+    } else if (band === "Content Safe") {
+        problem = "✅ Problem: Low immediate risk";
+    }
+    decisionProblemNode.textContent = problem;
+
+    decisionConfidenceNode.textContent = `Confidence: ${confidence.charAt(0).toUpperCase()}${confidence.slice(1)}`;
+
+    let predictedFailure = "Predicted failure type: Mixed issue";
+    if (infraWeak || band.includes("High")) {
+        predictedFailure = "Predicted failure type: Deliverability";
+    } else if (String(summary.primary_issue || "").toLowerCase().includes("cta") || String(summary.primary_issue || "").toLowerCase().includes("personal")) {
+        predictedFailure = "Predicted failure type: Copy/Targeting";
+    }
+    predictedFailureNode.textContent = predictedFailure;
+
+    const nonMeta = (findings || []).filter((f) => !String(f.title || "").toLowerCase().includes("analysis mode"));
+    decisionWhyNode.innerHTML = "";
+    (nonMeta.slice(0, 3).length ? nonMeta.slice(0, 3) : [{ title: "Signals detected", issue: "Multiple risk patterns are present." }]).forEach((item) => {
+        const li = document.createElement("li");
+        const title = String(item.title || "risk signal");
+        const issue = String(item.issue || item.impact || "");
+        li.textContent = `${title}: ${issue || "This pattern increases filtering risk."}`;
+        decisionWhyNode.appendChild(li);
+    });
+
+    const fixes = Array.isArray(summary.top_fixes) ? summary.top_fixes : [];
+    decisionFixFirstNode.innerHTML = "";
+    (fixes.slice(0, 3).length ? fixes.slice(0, 3) : [{ title: "Review technical auth" }, { title: "Lower CTA pressure" }, { title: "Simplify message structure" }]).forEach((fix, idx) => {
+        const li = document.createElement("li");
+        li.textContent = `${idx + 1}. ${commandFix(fix.title || fix.type || "Fix issue", fix.action)}`;
+        decisionFixFirstNode.appendChild(li);
+    });
+
+    decisionConsequenceNode.innerHTML = "";
+    const consequences = (band === "High Spam-Risk Signals" || band === "High Risk")
+        ? [
+            "High chance of spam placement if sent unchanged.",
+            "Domain reputation can degrade after repeated sends.",
+        ]
+        : [
+            "This can still underperform if key issues are ignored.",
+            "Reply rates may stay low without structural fixes.",
+        ];
+    consequences.forEach((line) => {
+        const li = document.createElement("li");
+        li.textContent = line;
+        decisionConsequenceNode.appendChild(li);
+    });
+}
+
+function getRecommendedRewriteStyle() {
+    const band = String(latestSummary && latestSummary.risk_band ? latestSummary.risk_band : "");
+    if (band === "High Spam-Risk Signals" || band === "High Risk") {
+        return "safe";
+    }
+    return "balanced";
+}
 async function showFixTransformation() {
     if (!fixOutput || !beforeEmailNode || !afterEmailNode || !rawEmailInput || !fixNowButton) {
         return;
@@ -923,12 +1002,12 @@ async function runAnalyze() {
         latestSummary = summary;
         latestFindings = findings;
 
-        renderStatus(summary, signals, findings);
-        renderBiggestRisk(summary, findings);
-        renderConsequences(summary);
-        renderHurting(findings);
-        renderFixes(summary);
+        renderDecisionEngine(summary, signals, findings);
         renderBreakdown(summary);
+
+        if (rewriteStyleInput) {
+            rewriteStyleInput.value = getRecommendedRewriteStyle();
+        }
 
         if (workflowStateNode) {
             workflowStateNode.textContent = "Step 1: Scan complete";
