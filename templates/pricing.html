@@ -83,13 +83,13 @@
           <div class="mt-6 rounded-2xl border border-slate-700 bg-slate-950/50 p-4">
             {% if authenticated %}
             <p class="text-sm text-slate-300">Signed in as <strong>{{ user_email }}</strong></p>
-            {% if checkout_ready %}
             <form action="/billing/checkout" method="post" class="mt-4">
               <button id="upgrade-btn" type="submit" class="btn-primary w-full">Upgrade Now</button>
             </form>
+            {% if checkout_ready %}
             <p class="mt-3 text-xs text-slate-500">You’ll be redirected to secure checkout.</p>
             {% else %}
-            <p class="mt-4 text-sm text-rose-200">Checkout is not configured yet. Set Stripe keys to enable billing.</p>
+            <p class="mt-3 text-sm text-rose-200">Checkout is not configured yet. Set Stripe keys to enable billing.</p>
             {% endif %}
             {% else %}
             <p class="text-sm text-slate-300">Sign in first to unlock checkout.</p>
