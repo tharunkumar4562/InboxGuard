@@ -13,10 +13,10 @@ const authSignInButton = document.getElementById("auth-signin");
 const authCreateButton = document.getElementById("auth-create");
 const authCloseButton = document.getElementById("auth-close");
 const authEmailInput = document.getElementById("auth-email");
-const emailCaptureModal = document.getElementById("email-capture-modal");
-const emailCaptureInput = document.getElementById("email-capture-email");
-const emailCaptureSubmitButton = document.getElementById("email-capture-submit");
-const emailCaptureCloseButton = document.getElementById("email-capture-close");
+const leadCaptureModal = document.getElementById("lead-capture-modal");
+const leadCaptureEmailInput = document.getElementById("lead-capture-email");
+const leadCaptureContinueButton = document.getElementById("lead-capture-continue");
+const leadCaptureCloseButton = document.getElementById("lead-capture-close");
 const profileLink = document.getElementById("profile-link");
 const profileAvatar = document.getElementById("profile-avatar");
 const profileInitial = document.getElementById("profile-initial");
@@ -70,6 +70,7 @@ const rewriteChangesNode = document.getElementById("rewrite-changes");
 const rewriteTrustNoteNode = document.getElementById("rewrite-trust-note");
 const rewriteLimitationsNode = document.getElementById("rewrite-limitations");
 const fixOutput = document.getElementById("fix-output");
+const saveFixButton = document.getElementById("save-fix");
 const beforeEmailNode = document.getElementById("before-email");
 const afterEmailNode = document.getElementById("after-email");
 const useFixedButton = document.getElementById("use-fixed");
@@ -116,15 +117,8 @@ let currentUserStatus = "inactive";
 let emailPastedTracked = false;
 let advancedOpenedTracked = false;
 let pendingAuthRedirectPath = "";
-let pendingEmailCaptureAction = "";
-
-function getLeadEmail() {
-    return String(localStorage.getItem("ig_lead_email") || "").trim().toLowerCase();
-}
-
-function hasLeadEmail() {
-    return getLeadEmail().length > 0;
-}
+let leadCaptureEmail = localStorage.getItem("ig_lead_capture_email") || "";
+let leadCaptureSaved = localStorage.getItem("ig_lead_capture_saved") === "1";
 
 const errorBanner = document.createElement("div");
 errorBanner.id = "error-banner";
@@ -160,11 +154,17 @@ function showAuthModal() {
         return;
     }
 
+    hideLeadCaptureModal();
+
     const msgNode = authModal.querySelector(".micro");
     if (msgNode) {
-        msgNode.textContent = pendingAuthRedirectPath
-            ? "Sign in to continue to pricing and unlock checkout."
-            : "You've used your free scans. Create a free account or sign in to continue.";
+        if (pendingAuthRedirectPath) {
+            msgNode.textContent = "Sign in to continue to pricing and unlock checkout.";
+        } else if (pendingAction === "save-fix") {
+            msgNode.textContent = "Sign in to save this rewrite to your account.";
+        } else {
+            msgNode.textContent = "You've used your free scans. Create a free account or sign in to continue.";
+        }
     }
     authModal.classList.remove("hidden");
 }
@@ -176,26 +176,27 @@ function hideAuthModal() {
     authModal.classList.add("hidden");
 }
 
-function showEmailCaptureModal() {
-    if (!emailCaptureModal) {
+function showLeadCaptureModal() {
+    if (!leadCaptureModal) {
         return;
     }
 
-    if (emailCaptureInput && !emailCaptureInput.value.trim()) {
-        emailCaptureInput.value = getLeadEmail();
-    }
+    hideAuthModal();
 
-    emailCaptureModal.classList.remove("hidden");
-    if (emailCaptureInput) {
-        setTimeout(() => emailCaptureInput.focus(), 50);
+    if (leadCaptureEmailInput && leadCaptureEmail) {
+        leadCaptureEmailInput.value = leadCaptureEmail;
+    }
+    leadCaptureModal.classList.remove("hidden");
+    if (leadCaptureEmailInput) {
+        setTimeout(() => leadCaptureEmailInput.focus(), 50);
     }
 }
 
-function hideEmailCaptureModal() {
-    if (!emailCaptureModal) {
+function hideLeadCaptureModal() {
+    if (!leadCaptureModal) {
         return;
     }
-    emailCaptureModal.classList.add("hidden");
+    leadCaptureModal.classList.add("hidden");
 }
 
 function needsAuthGate(action) {
@@ -203,6 +204,13 @@ function needsAuthGate(action) {
         return action === "analyze" && userScansUsed >= userScansLimit;
     }
     return action === "analyze" && anonymousScansUsed >= anonymousScansLimit;
+}
+
+function needsLeadCaptureGate(action) {
+    if (isAuthenticated) {
+        return false;
+    }
+    return action === "analyze" && anonymousScansUsed >= 1 && !leadCaptureSaved;
 }
 
 function updateProfileNav() {
@@ -255,6 +263,8 @@ async function refreshAuthStatus() {
         userScansUsed = Number(data && data.user_scans_used ? data.user_scans_used : 0);
         userScansLimit = Number(data && data.user_scans_limit ? data.user_scans_limit : 50);
         currentUserStatus = String(data && data.status ? data.status : "inactive").toLowerCase();
+        leadCaptureSaved = Boolean(data && data.lead_email_captured);
+        leadCaptureEmail = String(data && data.lead_email ? data.lead_email : leadCaptureEmail);
 
         // Set window-level user state for Razorpay
         window.currentUser = isAuthenticated;
@@ -265,6 +275,10 @@ async function refreshAuthStatus() {
 
         localStorage.setItem("ig_anon_scans_used", String(anonymousScansUsed));
         localStorage.setItem("ig_anon_scans_limit", String(anonymousScansLimit));
+        localStorage.setItem("ig_lead_capture_saved", leadCaptureSaved ? "1" : "0");
+        if (leadCaptureEmail) {
+            localStorage.setItem("ig_lead_capture_email", leadCaptureEmail);
+        }
         updateProfileNav();
     } catch (error) {
         // Keep UI operational even if auth status endpoint is temporarily unavailable.
@@ -276,6 +290,8 @@ function runPendingAction() {
         runAnalyze();
     } else if (pendingAction === "fix") {
         showFixTransformation();
+    } else if (pendingAction === "save-fix") {
+        saveCurrentFix();
     }
     pendingAction = null;
 }
@@ -390,6 +406,35 @@ async function continueWithEmail() {
     onAuthSuccess("email_continue");
 }
 
+async function continueWithLeadCapture() {
+    const email = leadCaptureEmailInput ? String(leadCaptureEmailInput.value || "").trim().toLowerCase() : "";
+    if (!email || !email.includes("@")) {
+        showError("Enter a valid email to continue.");
+        return;
+    }
+
+    const payload = new FormData();
+    payload.set("email", email);
+    payload.set("source", "scan_gate");
+
+    const response = await fetch("/lead-capture", {
+        method: "POST",
+        body: payload,
+    });
+
+    if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.detail || "Could not save your email.");
+    }
+
+    leadCaptureSaved = true;
+    leadCaptureEmail = email;
+    localStorage.setItem("ig_lead_capture_saved", "1");
+    localStorage.setItem("ig_lead_capture_email", email);
+    hideLeadCaptureModal();
+    runPendingAction();
+}
+
 async function continueWithGoogle() {
     stashPendingContext(pendingAction || "analyze");
     localStorage.setItem("ig_resume_after_auth", "1");
@@ -411,10 +456,47 @@ function handleAuthAction(action) {
     hideAuthModal();
 }
 
+async function saveCurrentFix() {
+    if (!latestRewriteContext) {
+        showError("Generate a fix first so we have something to save.");
+        return;
+    }
+    if (!isAuthenticated) {
+        showAuthModal();
+        return;
+    }
+
+    const payload = new FormData();
+    payload.set("original_subject", String(latestRewriteContext.original_subject || ""));
+    payload.set("original_body", String(latestRewriteContext.original_body || latestRewriteContext.original_text || ""));
+    payload.set("rewritten_subject", String(latestRewriteContext.rewritten_subject || ""));
+    payload.set("rewritten_body", String(latestRewriteContext.rewritten_body || latestRewriteContext.rewritten_text || ""));
+    payload.set("score_delta", String(latestRewriteContext.score_delta || 0));
+    payload.set("from_risk_band", String(latestRewriteContext.from_risk_band || ""));
+    payload.set("to_risk_band", String(latestRewriteContext.to_risk_band || ""));
+    payload.set("rewrite_style", String(latestRewriteContext.rewrite_style || "balanced"));
+
+    const response = await fetch("/save-fix", {
+        method: "POST",
+        body: payload,
+    });
+    if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.detail || "Could not save this fix.");
+    }
+
+    if (saveFixButton) {
+        saveFixButton.textContent = "Saved";
+        saveFixButton.disabled = true;
+    }
+    showError("Fix saved to your account.");
+}
+
 // Inline fallback hooks for resilient modal behavior.
 window.igAuthSignIn = () => handleAuthAction("signin");
 window.igAuthCreate = () => handleAuthAction("create");
 window.igAuthClose = () => handleAuthAction("close");
+window.igLeadCaptureClose = () => hideLeadCaptureModal();
 
 function activateTab(tab) {
     if (!dashboardTab || !threatScanTab) {
@@ -988,6 +1070,10 @@ async function showFixTransformation() {
         afterEmailNode.textContent = formatEmailBlock(rewrittenSubject, rewrittenBody);
 
         latestRewriteContext = {
+            original_subject: originalSubject,
+            original_body: originalBody,
+            rewritten_subject: rewrittenSubject,
+            rewritten_body: rewrittenBody,
             original_text: String(data.original_text || original),
             rewritten_text: rewritten,
             from_risk_band: String(data.from_risk_band || "Needs Review"),
@@ -1095,12 +1181,6 @@ async function showFixTransformation() {
 async function runAnalyze() {
     await refreshAuthStatus();
 
-    if (!isAuthenticated && anonymousScansUsed >= 2 && !hasLeadEmail()) {
-        pendingEmailCaptureAction = "analyze";
-        showEmailCaptureModal();
-        return;
-    }
-
     if (needsAuthGate("analyze")) {
         if (isAuthenticated) {
             showError("You reached your monthly free plan scan limit. Upgrade is required for more scans.");
@@ -1191,6 +1271,10 @@ async function runAnalyze() {
         }
         if (fixOutput) {
             fixOutput.classList.add("hidden");
+        }
+        if (saveFixButton) {
+            saveFixButton.disabled = false;
+            saveFixButton.textContent = "Save Fix";
         }
 
         setResultState();
@@ -1399,29 +1483,6 @@ function canUserScan() {
     */
 }
 
-function captureLeadEmail() {
-    if (!emailCaptureInput) {
-        return;
-    }
-
-    const email = String(emailCaptureInput.value || "").trim().toLowerCase();
-    if (!email || !email.includes("@")) {
-        showError("Enter a valid email to get your full report.");
-        return;
-    }
-
-    localStorage.setItem("ig_lead_email", email);
-    currentUserEmail = email;
-    window.currentUserEmail = email;
-    hideEmailCaptureModal();
-    showError("Email saved. Continue scanning and get your full report.");
-
-    if (pendingEmailCaptureAction === "analyze") {
-        pendingEmailCaptureAction = "";
-        runPendingAction();
-    }
-}
-
 function showPaywall() {
     const paywall = document.getElementById("paywall");
     if (paywall) {
@@ -1554,11 +1615,31 @@ if (dashboardTab) {
     if (feedbackUnsureButton) {
         feedbackUnsureButton.addEventListener("click", () => sendFeedback("not_sure"));
     }
+    if (saveFixButton) {
+        saveFixButton.addEventListener("click", () => {
+            pendingAction = "save-fix";
+            saveCurrentFix().catch((error) => {
+                showError(error && error.message ? error.message : "Could not save this fix.");
+            });
+        });
+    }
     if (runDiagnosisButton) {
         runDiagnosisButton.addEventListener("click", () => {
             runCampaignDiagnosis().catch((error) => {
                 showError(error && error.message ? error.message : "Could not diagnose campaign.");
             });
+        });
+    }
+    if (leadCaptureContinueButton) {
+        leadCaptureContinueButton.addEventListener("click", () => {
+            continueWithLeadCapture().catch((error) => {
+                showError(error && error.message ? error.message : "Could not save your email.");
+            });
+        });
+    }
+    if (leadCaptureCloseButton) {
+        leadCaptureCloseButton.addEventListener("click", () => {
+            hideLeadCaptureModal();
         });
     }
     if (authSignInButton) {
@@ -1569,15 +1650,6 @@ if (dashboardTab) {
     }
     if (authCloseButton) {
         authCloseButton.addEventListener("click", () => handleAuthAction("close"));
-    }
-    if (emailCaptureSubmitButton) {
-        emailCaptureSubmitButton.addEventListener("click", () => captureLeadEmail());
-    }
-    if (emailCaptureCloseButton) {
-        emailCaptureCloseButton.addEventListener("click", () => {
-            pendingEmailCaptureAction = "";
-            hideEmailCaptureModal();
-        });
     }
     if (authModal) {
         authModal.addEventListener("click", (event) => {
@@ -1602,16 +1674,24 @@ if (dashboardTab) {
             }
         });
     }
-
-    if (emailCaptureModal) {
-        emailCaptureModal.addEventListener("click", (event) => {
+    if (leadCaptureModal) {
+        leadCaptureModal.addEventListener("click", (event) => {
             const target = event.target;
             if (!(target instanceof HTMLElement)) {
                 return;
             }
-            if (target.id === "email-capture-modal") {
-                pendingEmailCaptureAction = "";
-                hideEmailCaptureModal();
+            if (target.id === "lead-capture-modal") {
+                hideLeadCaptureModal();
+                return;
+            }
+            if (target.id === "lead-capture-continue") {
+                continueWithLeadCapture().catch((error) => {
+                    showError(error && error.message ? error.message : "Could not save your email.");
+                });
+                return;
+            }
+            if (target.id === "lead-capture-close") {
+                hideLeadCaptureModal();
             }
         });
     }
@@ -1623,6 +1703,10 @@ if (dashboardTab) {
                 return;
             }
             pendingAction = "analyze";
+            if (needsLeadCaptureGate("analyze")) {
+                showLeadCaptureModal();
+                return;
+            }
             if (needsAuthGate("analyze")) {
                 if (isAuthenticated) {
                     showError("You reached your monthly free plan scan limit. Upgrade is required for more scans.");

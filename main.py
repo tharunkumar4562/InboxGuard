@@ -178,6 +178,35 @@ def _ensure_auth_db() -> None:
             )
             """
         )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS lead_captures (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                anon_id TEXT,
+                email TEXT NOT NULL,
+                source TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS saved_fixes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                original_subject TEXT,
+                original_body TEXT,
+                rewritten_subject TEXT,
+                rewritten_body TEXT,
+                score_delta INTEGER NOT NULL DEFAULT 0,
+                from_risk_band TEXT,
+                to_risk_band TEXT,
+                rewrite_style TEXT,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY(user_id) REFERENCES users(id)
+            )
+            """
+        )
         conn.commit()
     finally:
         conn.close()
@@ -587,6 +616,102 @@ def _recent_user_feedback(user_id: int, limit: int = 5) -> list[dict]:
         conn.close()
 
 
+def _store_lead_capture(email: str, source: str, anon_id: str = "") -> None:
+    _ensure_auth_db_ready()
+    conn = _auth_db_conn()
+    try:
+        conn.execute(
+            "INSERT INTO lead_captures(anon_id, email, source, created_at) VALUES (?, ?, ?, ?)",
+            ((anon_id or "")[:120], (email or "")[:120], (source or "capture_gate")[:40], _now_iso()),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _store_saved_fix(
+    user_id: int,
+    *,
+    original_subject: str,
+    original_body: str,
+    rewritten_subject: str,
+    rewritten_body: str,
+    score_delta: int,
+    from_risk_band: str,
+    to_risk_band: str,
+    rewrite_style: str,
+) -> None:
+    _ensure_auth_db_ready()
+    conn = _auth_db_conn()
+    try:
+        conn.execute(
+            """
+            INSERT INTO saved_fixes(
+                user_id,
+                original_subject,
+                original_body,
+                rewritten_subject,
+                rewritten_body,
+                score_delta,
+                from_risk_band,
+                to_risk_band,
+                rewrite_style,
+                created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                user_id,
+                (original_subject or "")[:240],
+                (original_body or "")[:4000],
+                (rewritten_subject or "")[:240],
+                (rewritten_body or "")[:4000],
+                int(score_delta or 0),
+                (from_risk_band or "")[:80],
+                (to_risk_band or "")[:80],
+                (rewrite_style or "balanced")[:32],
+                _now_iso(),
+            ),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _recent_saved_fixes(user_id: int, limit: int = 8) -> list[dict]:
+    _ensure_auth_db_ready()
+    conn = _auth_db_conn()
+    try:
+        rows = conn.execute(
+            """
+            SELECT original_subject, original_body, rewritten_subject, rewritten_body, score_delta,
+                   from_risk_band, to_risk_band, rewrite_style, created_at
+            FROM saved_fixes
+            WHERE user_id=?
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (user_id, limit),
+        ).fetchall()
+        result: list[dict] = []
+        for row in rows:
+            result.append(
+                {
+                    "original_subject": str(row["original_subject"] or ""),
+                    "original_body": str(row["original_body"] or ""),
+                    "rewritten_subject": str(row["rewritten_subject"] or ""),
+                    "rewritten_body": str(row["rewritten_body"] or ""),
+                    "score_delta": int(row["score_delta"] or 0),
+                    "from_risk_band": str(row["from_risk_band"] or ""),
+                    "to_risk_band": str(row["to_risk_band"] or ""),
+                    "rewrite_style": str(row["rewrite_style"] or "balanced"),
+                    "created_at": str(row["created_at"] or ""),
+                }
+            )
+        return result
+    finally:
+        conn.close()
+
+
 def _user_streak_days(user_id: int) -> int:
     _ensure_auth_db_ready()
     conn = _auth_db_conn()
@@ -699,6 +824,7 @@ def _set_session_user(request: Request, user_id: int, email: str, name: str = ""
 def _auth_status_payload(request: Request) -> dict:
     user = _get_session_user(request)
     anon_used = _get_anon_scans_used(request)
+    lead_email = str(request.session.get("lead_email", "")).strip()
     payload = {
         "authenticated": bool(user),
         "email": user["email"] if user else "",
@@ -706,6 +832,8 @@ def _auth_status_payload(request: Request) -> dict:
         "avatar_url": user["picture"] if user else "",
         "anonymous_scans_used": anon_used,
         "anonymous_scans_limit": ANON_SCAN_LIMIT,
+        "lead_email_captured": bool(user) or bool(lead_email),
+        "lead_email": lead_email,
         "user_scans_used": 0,
         "user_scans_limit": FREE_USER_SCAN_LIMIT,
         "google_enabled": GOOGLE_AUTH_CONFIGURED,
@@ -1042,34 +1170,13 @@ def auth_me(request: Request):
     user = _get_session_user(request)
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
-
-    usage = _get_usage(user["id"])
-    recent_results = _recent_user_feedback(user["id"], limit=5)
-    streak_days = _user_streak_days(user["id"])
-    health_score = _health_score(usage, recent_results)
     return {
         "authenticated": True,
-        "profile": {
-            "name": user["name"] or _display_name_from_email(user["email"]),
-            "email": user["email"],
-            "avatar_url": user["picture"] or _avatar_url_for_email(user["email"]),
-            "scans_used": usage["scans_used"],
-            "emails_scanned_count": usage["emails_scanned_count"],
-            "rewrite_clicked": usage["rewrite_clicked"],
-            "last_active": usage["last_active"],
-            "health_score": health_score,
-            "streak_days": streak_days,
-            "recent_results": recent_results,
-        },
+        "profile": _build_user_profile(user),
     }
 
 
-@app.get("/profile", response_class=HTMLResponse)
-def profile_page(request: Request):
-    user = _get_session_user(request)
-    if not user:
-        return RedirectResponse(url="/?auth=1", status_code=303)
-
+def _build_user_profile(user: dict, include_saved_fixes: bool = False) -> dict:
     usage = _get_usage(user["id"])
     recent_results = _recent_user_feedback(user["id"], limit=5)
     streak_days = _user_streak_days(user["id"])
@@ -1086,6 +1193,16 @@ def profile_page(request: Request):
         "streak_days": streak_days,
         "recent_results": recent_results,
     }
+    if include_saved_fixes:
+        profile["saved_fixes"] = _recent_saved_fixes(user["id"], limit=8)
+    return profile
+
+
+@app.get("/profile", response_class=HTMLResponse)
+def profile_page(request: Request):
+    user = _get_session_user(request)
+    if not user:
+        return RedirectResponse(url="/?auth=1", status_code=303)
 
     return render_template_safe(
         request,
@@ -1094,13 +1211,276 @@ def profile_page(request: Request):
             "page_title": "Your Profile | InboxGuard",
             "meta_description": "View your InboxGuard account profile and usage.",
             "canonical_url": f"{SITE_URL}/profile",
-            "profile": profile,
+            "profile": _build_user_profile(user),
         },
     )
 
 @app.get("/dashboard")
 async def dashboard_redirect() -> RedirectResponse:
     return RedirectResponse(url="/profile", status_code=307)
+
+
+def _page_section(title: str, body: str, bullets: list[str] | None = None) -> dict:
+    return {
+        "title": title,
+        "body": body,
+        "bullets": bullets or [],
+    }
+
+
+def _render_info_page(request: Request, *, page_title: str, meta_description: str, canonical_path: str, headline: str, intro: str, sections: list[dict], cta_label: str = "Back to scan"):
+    return render_template_safe(
+        request,
+        "simple_page.html",
+        {
+            "page_title": page_title,
+            "meta_description": meta_description,
+            "canonical_url": f"{SITE_URL}{canonical_path}",
+            "headline": headline,
+            "intro": intro,
+            "sections": sections,
+            "cta_label": cta_label,
+        },
+    )
+
+
+@app.get("/about", response_class=HTMLResponse)
+def about_page(request: Request):
+    return _render_info_page(
+        request,
+        page_title="About InboxGuard",
+        meta_description="Why InboxGuard exists and how it helps you fix emails before they fail.",
+        canonical_path="/about",
+        headline="Built to stop bad sends before they cost you trust",
+        intro="InboxGuard is designed as a pre-send protection layer for people who want a fast, deterministic risk check before a campaign goes out.",
+        sections=[
+            _page_section("What it does", "It scores the draft, explains the risky signals, and gives you a safer rewrite path before you send.", ["Risk-first output", "Content versus infra separation", "Fast feedback before campaigns"]),
+            _page_section("Why it exists", "Most deliverability tools are too late or too opaque. This product is built to make the failure mode obvious while you still can fix it.", ["Less guessing", "Fewer damaged sends", "Clear next actions"]),
+        ],
+    )
+
+
+@app.get("/privacy", response_class=HTMLResponse)
+def privacy_page(request: Request):
+    return _render_info_page(
+        request,
+        page_title="InboxGuard Privacy Policy",
+        meta_description="Privacy details for InboxGuard.",
+        canonical_path="/privacy",
+        headline="Privacy policy",
+        intro="We only collect the minimum data needed to run scans, improve results, and manage access.",
+        sections=[
+            _page_section("What we store", "Email drafts, scan metadata, feedback, and account details when you sign in or buy a plan.", ["Account info", "Usage data", "Feedback and saved fixes"]),
+            _page_section("What we do not do", "We do not sell your data. We use it to provide the scan, maintain your account, and improve the product.", ["No data brokerage", "No hidden resale", "No unnecessary tracking"]),
+        ],
+    )
+
+
+@app.get("/terms", response_class=HTMLResponse)
+def terms_page(request: Request):
+    return _render_info_page(
+        request,
+        page_title="InboxGuard Terms",
+        meta_description="Terms and use conditions for InboxGuard.",
+        canonical_path="/terms",
+        headline="Terms of use",
+        intro="Use InboxGuard as a decision aid, not as a guarantee of inbox placement.",
+        sections=[
+            _page_section("Service limits", "Scan limits, feature access, and billing terms may change as the product evolves.", ["Free-tier limits apply", "Paid access follows subscription status", "Service is provided as-is"]),
+            _page_section("Your responsibility", "You remain responsible for the content you send and for compliance with the policies that govern your messages.", ["Review drafts before sending", "Follow provider policies", "Use the score as guidance"]),
+        ],
+    )
+
+
+@app.get("/inbox-tips", response_class=HTMLResponse)
+def inbox_tips_page(request: Request):
+    tips = [
+        _page_section("Fix the first three things", "Remove pressure language, reduce link clutter, and make the request specific before you tune anything else.", ["Lower urgency", "Use one clear CTA", "Avoid generic blast language"]),
+        _page_section("Check the sender setup", "If infra is weak, content edits alone will not save the send.", ["SPF", "DKIM", "DMARC"]),
+        _page_section("Use the rewrite as a base", "The suggested draft is meant to reduce filter triggers quickly, then you can refine it for tone.", ["Preserve intent", "Trim repetition", "Keep the ask concrete"]),
+    ]
+    return _render_info_page(
+        request,
+        page_title="InboxGuard Inbox Tips",
+        meta_description="Practical deliverability tips and scan guidance.",
+        canonical_path="/inbox-tips",
+        headline="Small changes that usually move inbox placement",
+        intro="These are the fast checks most likely to improve deliverability before you spend time on deeper tuning.",
+        sections=tips,
+    )
+
+
+@app.get("/results", response_class=HTMLResponse)
+def results_page(request: Request):
+    user = _get_session_user(request)
+    if user:
+        profile = _build_user_profile(user, include_saved_fixes=True)
+        sections = [
+            _page_section("Your scan history", "Recent results and outcomes from your account.", [
+                f"Scans used: {profile['scans_used']}",
+                f"Emails scanned: {profile['emails_scanned_count']}",
+                f"Health score: {profile['health_score']}",
+            ]),
+            _page_section("Recent outcomes", "Feedback you have given after sending.", [
+                f"{item['outcome'].capitalize()} • {item['to_risk_band'] or item['from_risk_band'] or 'No band'}" for item in profile["recent_results"][:4]
+            ] or ["No feedback yet."]),
+        ]
+    else:
+        profile = None
+        sections = [
+            _page_section("What results will show", "Sign in to see your scan history, recent outcomes, and saved fixes.", ["Health score", "Recent outcomes", "Saved rewrites"]),
+            _page_section("Why it matters", "The Results page is meant to replace guesswork with a concrete history of what you fixed and how it performed.", ["Track improvements", "Review patterns", "Compare runs"]),
+        ]
+
+    return _render_info_page(
+        request,
+        page_title="InboxGuard Results",
+        meta_description="Review scan results, health score, and recent outcomes.",
+        canonical_path="/results",
+        headline="Results that show what changed, not just the score",
+        intro="Use this page to review your recent scans and the fixes that made the biggest difference.",
+        sections=sections,
+    )
+
+
+@app.get("/reports", response_class=HTMLResponse)
+def reports_page(request: Request):
+    user = _get_session_user(request)
+    if not user:
+        return _render_info_page(
+            request,
+            page_title="InboxGuard Reports",
+            meta_description="InboxGuard report export and summary page.",
+            canonical_path="/reports",
+            headline="Reports and exports",
+            intro="Sign in to export your scan history and feedback as a simple report.",
+            sections=[
+                _page_section("What you can export", "A signed-in report can include your saved fixes, recent feedback, and scan activity.", ["CSV export", "Summary view", "Recent outcomes"]),
+            ],
+        )
+
+    profile = _build_user_profile(user, include_saved_fixes=True)
+    sections = [
+        _page_section("Account summary", "A quick view of your recent account activity.", [
+            f"Scans used: {profile['scans_used']}",
+            f"Rewrite clicks: {profile['rewrite_clicked']}",
+            f"Last active: {profile['last_active'] or '—'}",
+        ]),
+        _page_section("Saved fixes", "Your most recent rewritten drafts.", [
+            item["rewritten_subject"] or item["rewritten_body"][:80] or "Untitled fix"
+            for item in profile.get("saved_fixes", [])[:4]
+        ] or ["No saved fixes yet."]),
+    ]
+    return _render_info_page(
+        request,
+        page_title="InboxGuard Reports",
+        meta_description="InboxGuard report export and summary page.",
+        canonical_path="/reports",
+        headline="Reports and exports",
+        intro="See a compact summary of your history and download it as a CSV if needed.",
+        sections=sections,
+    )
+
+
+@app.get("/saved-fixes", response_class=HTMLResponse)
+def saved_fixes_page(request: Request):
+    user = _get_session_user(request)
+    if not user:
+        return _render_info_page(
+            request,
+            page_title="InboxGuard Saved Fixes",
+            meta_description="Saved rewritten drafts in InboxGuard.",
+            canonical_path="/saved-fixes",
+            headline="Saved fixes",
+            intro="Sign in to store rewritten drafts and revisit them later.",
+            sections=[_page_section("Why it helps", "Saving fixes lets you compare versions, reuse stronger copy, and keep the best draft for the next send.", ["Reuse good rewrites", "Compare revisions", "Track deltas"])],
+        )
+
+    profile = _build_user_profile(user, include_saved_fixes=True)
+    saved_fixes = profile.get("saved_fixes", [])
+    sections = [
+        _page_section("Recent saved fixes", "The last drafts you stored.", [
+            (item["original_subject"] or item["original_body"][:80] or "Untitled draft") + " -> " + (item["rewritten_subject"] or item["rewritten_body"][:80] or "Untitled rewrite")
+            for item in saved_fixes[:6]
+        ] or ["No saved fixes yet."]),
+    ]
+    return _render_info_page(
+        request,
+        page_title="InboxGuard Saved Fixes",
+        meta_description="Saved rewritten drafts in InboxGuard.",
+        canonical_path="/saved-fixes",
+        headline="Saved fixes",
+        intro="Keep the best rewritten versions so you can reuse them across campaigns.",
+        sections=sections,
+    )
+
+
+@app.get("/results.csv")
+def results_csv(request: Request):
+    user = _get_session_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="AUTH_REQUIRED")
+
+    profile = _build_user_profile(user, include_saved_fixes=True)
+    rows = ["type,label,detail"]
+    rows.append(f"summary,scans_used,{profile['scans_used']}")
+    rows.append(f"summary,emails_scanned,{profile['emails_scanned_count']}")
+    rows.append(f"summary,health_score,{profile['health_score']}")
+    for item in profile.get("recent_results", []):
+        rows.append(f"feedback,{item['outcome']},{item['to_risk_band'] or item['from_risk_band']}")
+    for item in profile.get("saved_fixes", []):
+        rows.append(f"saved_fix,{item['rewrite_style']},{item['score_delta']}")
+    content = "\n".join(rows) + "\n"
+    return Response(content=content, media_type="text/csv", headers={"Content-Disposition": "attachment; filename=inboxguard-results.csv"})
+
+
+@app.get("/reports.csv")
+def reports_csv(request: Request):
+    return results_csv(request)
+
+
+@app.post("/lead-capture")
+def lead_capture(request: Request, email: str = Form(""), source: str = Form("capture_gate")):
+    clean_email = (email or "").strip().lower()
+    if not clean_email or "@" not in clean_email:
+        raise HTTPException(status_code=400, detail="Valid email is required")
+
+    anon_id = _get_or_create_anon_id(request)
+    request.session["lead_email"] = clean_email
+    _store_lead_capture(clean_email, source, anon_id)
+    track_event("lead_capture", {"source": (source or "capture_gate")[:40]})
+    return JSONResponse({"ok": True, "email": clean_email})
+
+
+@app.post("/save-fix")
+def save_fix(
+    request: Request,
+    original_subject: str = Form(""),
+    original_body: str = Form(""),
+    rewritten_subject: str = Form(""),
+    rewritten_body: str = Form(""),
+    score_delta: int = Form(0),
+    from_risk_band: str = Form(""),
+    to_risk_band: str = Form(""),
+    rewrite_style: str = Form("balanced"),
+):
+    user = _get_session_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="AUTH_REQUIRED")
+
+    _store_saved_fix(
+        user["id"],
+        original_subject=original_subject,
+        original_body=original_body,
+        rewritten_subject=rewritten_subject,
+        rewritten_body=rewritten_body,
+        score_delta=score_delta,
+        from_risk_band=from_risk_band,
+        to_risk_band=to_risk_band,
+        rewrite_style=rewrite_style,
+    )
+    track_event("save_fix", {"rewrite_style": (rewrite_style or "balanced")[:20]})
+    return JSONResponse({"ok": True})
 
 
 @app.post("/signup")

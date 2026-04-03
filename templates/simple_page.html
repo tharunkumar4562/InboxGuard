@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-WXGNG9TEFK"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-WXGNG9TEFK');
+    </script>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{ page_title }}</title>
+    <meta name="description" content="{{ meta_description }}" />
+    <link rel="canonical" href="{{ canonical_url }}" />
+    <link rel="icon" href="/static/favicon-48.png" type="image/png" sizes="48x48" />
+    <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" sizes="any" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/static/css/styles.css" />
+  </head>
+  <body>
+    <div class="profile-shell">
+      <header class="profile-topbar">
+        <a class="profile-back" href="/">{{ cta_label or "Back to scan" }}</a>
+        <a class="profile-logout" href="/pricing">Pricing</a>
+      </header>
+
+      <main class="profile-main">
+        <section class="profile-card">
+          <div>
+            <h1>{{ headline }}</h1>
+            <p class="profile-email">{{ intro }}</p>
+          </div>
+        </section>
+
+        {% for section in sections %}
+        <section class="profile-stat-card">
+          <p class="profile-stat-label">{{ section.title }}</p>
+          <p class="profile-email" style="margin-top: 4px;">{{ section.body }}</p>
+          {% if section.bullets %}
+          <ul class="compact-list" style="margin-top: 10px;">
+            {% for bullet in section.bullets %}
+            <li>{{ bullet }}</li>
+            {% endfor %}
+          </ul>
+          {% endif %}
+        </section>
+        {% endfor %}
+      </main>
+    </div>
+  </body>
+</html>

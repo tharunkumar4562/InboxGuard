@@ -68,10 +68,10 @@
         <nav>
           <button id="tab-dashboard" class="nav-item active" type="button">Home</button>
           <button id="tab-threat-scan" class="nav-item" type="button">Scan Email</button>
-          <button class="nav-item disabled" type="button">Saved Fixes <span>Coming soon</span></button>
-          <button class="nav-item disabled" type="button">Inbox Tips <span>Coming soon</span></button>
-          <button class="nav-item disabled" type="button">Results <span>Coming soon</span></button>
-          <button class="nav-item disabled" type="button">Reports <span>Coming soon</span></button>
+          <button class="nav-item" type="button" onclick="window.location.href='/saved-fixes'">Saved Fixes</button>
+          <button class="nav-item" type="button" onclick="window.location.href='/inbox-tips'">Inbox Tips</button>
+          <button class="nav-item" type="button" onclick="window.location.href='/results'">Results</button>
+          <button class="nav-item" type="button" onclick="window.location.href='/reports'">Reports</button>
         </nav>
 
         <a id="profile-link" class="profile-link hidden" href="/profile" aria-label="Open profile">
@@ -302,6 +302,7 @@ I noticed your recent post and had one short idea to improve reply rates."></tex
               <li>Final placement still depends on domain reputation, list quality, and send behavior.</li>
             </ul>
             <div class="actions" style="margin-top: 12px;">
+              <button id="save-fix" type="button" class="btn-secondary">Save Fix</button>
               <button id="use-fixed" type="button" class="btn-primary">Copy Fixed Email</button>
               <button id="send-gmail" type="button" class="btn-secondary">Open in Gmail</button>
               <button id="edit-manual" type="button" class="btn-secondary">Edit Manually</button>
@@ -360,7 +361,25 @@ I noticed your recent post and had one short idea to improve reply rates."></tex
             <ul id="diagnosis-actions" class="compact-list"></ul>
           </div>
         </section>
+
+        <div style="margin-top: 14px; display: flex; flex-wrap: wrap; gap: 12px; color: #94a3b8; font-size: 0.92rem;">
+          <a href="/about" class="link-action">About</a>
+          <a href="/privacy" class="link-action">Privacy</a>
+          <a href="/terms" class="link-action">Terms</a>
+        </div>
       </main>
+    </div>
+
+    <div id="lead-capture-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="lead-capture-title">
+      <div class="modal-card">
+        <h3 id="lead-capture-title">Get your next scan unlocked</h3>
+        <p class="micro">Before the second scan, tell us where to send saved fixes and follow-up tips.</p>
+        <div style="display:grid; gap:8px; margin-top:6px;">
+          <input id="lead-capture-email" type="email" placeholder="you@company.com" style="padding:10px 12px; border-radius:10px; border:1px solid rgba(148,163,184,0.35); background:#07162e; color:#e2e8f0;" />
+          <button id="lead-capture-continue" type="button" class="btn-primary">Continue to scan</button>
+        </div>
+        <button id="lead-capture-close" type="button" class="link-action" onclick="window.igLeadCaptureClose && window.igLeadCaptureClose()">Not now</button>
+      </div>
     </div>
 
     <div id="auth-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="auth-modal-title">
@@ -376,18 +395,6 @@ I noticed your recent post and had one short idea to improve reply rates."></tex
           <button id="auth-create" type="button" class="btn-secondary" onclick="window.igAuthCreate && window.igAuthCreate()">Continue with Email</button>
         </div>
         <button id="auth-close" type="button" class="link-action" onclick="window.igAuthClose && window.igAuthClose()">Not now</button>
-      </div>
-    </div>
-
-    <div id="email-capture-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="email-capture-title">
-      <div class="modal-card">
-        <h3 id="email-capture-title">Enter your email to get your full report</h3>
-        <p class="micro">You have seen enough to know the tool is useful. Leave your email to keep scanning and unlock the full report.</p>
-        <div style="display:grid; gap:8px; margin-top:6px;">
-          <input id="email-capture-email" type="email" placeholder="you@company.com" style="padding:10px 12px; border-radius:10px; border:1px solid rgba(148,163,184,0.35); background:#07162e; color:#e2e8f0;" />
-          <button id="email-capture-submit" type="button" class="btn-primary" onclick="window.igEmailCaptureSubmit && window.igEmailCaptureSubmit()">Get full report</button>
-        </div>
-        <button id="email-capture-close" type="button" class="link-action" onclick="window.igEmailCaptureClose && window.igEmailCaptureClose()">Skip for now</button>
       </div>
     </div>
 
