@@ -92,8 +92,9 @@
             <p class="mt-3 text-sm text-rose-200">Checkout is not configured yet. Set Stripe keys to enable billing.</p>
             {% endif %}
             {% else %}
-            <p class="text-sm text-slate-300">Sign in first to unlock checkout.</p>
-            <a href="/?auth=1" class="mt-4 inline-flex w-full items-center justify-center rounded-2xl bg-blue-600 px-6 py-3 text-base font-bold text-white shadow-lg shadow-blue-900/40 transition hover:bg-blue-700 no-underline">Sign in to continue</a>
+            <p class="text-sm text-slate-300">Sign in to unlock checkout.</p>
+            <button type="button" class="btn-primary w-full mt-4" disabled>Upgrade Now</button>
+            <a href="/?auth=1" class="mt-3 inline-flex w-full items-center justify-center rounded-2xl bg-blue-600 px-6 py-3 text-base font-bold text-white shadow-lg shadow-blue-900/40 transition hover:bg-blue-700 no-underline">Sign in to continue</a>
             {% if google_enabled %}
             <a href="/auth/google/login?next=/pricing" class="mt-3 inline-flex w-full items-center justify-center rounded-2xl border border-slate-600 px-6 py-3 text-base font-semibold text-slate-100 transition hover:border-slate-400 no-underline">Continue with Google</a>
             {% endif %}
