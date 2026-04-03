@@ -70,14 +70,14 @@
 }
 
 .modal-content .price {
-    font-size: 28px;
-    color: #22c55e;
-    margin: 10px 0 20px 0;
+    font-size: 30px;
+    color: #86efac;
+    margin: 8px 0 10px 0;
     font-weight: bold;
 }
 
 .pricing-note {
-    margin: -12px 0 16px 0;
+    margin: 0 0 16px 0;
     color: #94a3b8;
     font-size: 0.92rem;
     line-height: 1.45;
@@ -114,6 +114,41 @@
     transition: background 0.2s;
 }
 
+.pay-btn {
+    width: 100%;
+    padding: 14px 18px;
+    border-radius: 12px;
+    border: none;
+    cursor: pointer;
+    margin: 14px 0 10px;
+    background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+    color: #07111f;
+    font-size: 1.02rem;
+    font-weight: 800;
+    letter-spacing: 0.01em;
+    box-shadow: 0 12px 28px rgba(34, 197, 94, 0.18);
+    transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+    appearance: none;
+}
+
+.pay-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 14px 32px rgba(34, 197, 94, 0.24);
+    filter: brightness(1.02);
+}
+
+.pay-btn:active {
+    transform: scale(0.99);
+}
+
+.pay-btn:disabled {
+    background: #1f2937;
+    color: #6b7280;
+    box-shadow: none;
+    cursor: not-allowed;
+    transform: none;
+}
+
 .primary-btn:hover {
     background: #16a34a;
 }
@@ -128,6 +163,10 @@
     cursor: pointer;
     width: 100%;
     transition: all 0.2s;
+}
+
+.modal .secondary-btn {
+    margin-top: 0;
 }
 
 .secondary-btn:hover {
