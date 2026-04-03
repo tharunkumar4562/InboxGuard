@@ -34,6 +34,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/static/css/styles.css" />
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
     <script type="application/ld+json">
       [
         {
@@ -85,9 +86,26 @@
           <h1>InboxGuard</h1>
           <div class="topbar-actions">
             <button id="start-btn" type="button" class="start-btn">Try with your email</button>
-            <a id="access-btn" class="access-link" href="/pricing">Get Access</a>
+            <button id="access-btn" type="button" class="access-link">Get Access</button>
           </div>
         </header>
+        
+        <div id="pricing-modal" class="modal hidden">
+          <div class="modal-content">
+            <button class="modal-close" onclick="closePricingModal()">×</button>
+            <h2>Upgrade to InboxGuard Pro</h2>
+            <p class="price">₹999 / month</p>
+            <ul class="pricing-features">
+              <li>Unlimited scans</li>
+              <li>Unlimited fixes</li>
+              <li>Save & track emails</li>
+              <li>Domain reputation tracking</li>
+              <li>Batch testing</li>
+            </ul>
+            <button id="pay-btn" class="primary-btn">Upgrade Now</button>
+            <button onclick="closePricingModal()" class="secondary-btn">Cancel</button>
+          </div>
+        </div>
 
         <section class="domain-risk-alert">
           <p class="domain-risk-title">Domain reputation at risk</p>
@@ -149,6 +167,12 @@ I noticed your recent post and had one short idea to improve reply rates."></tex
         <section id="idle-note" class="card idle-note">
           <p>No analysis yet. Paste your email and run scan to detect deliverability risks.</p>
         </section>
+        
+        <div id="paywall" class="hidden paywall-section">
+          <h3>Want to analyze more emails?</h3>
+          <p>Upgrade to Pro to continue</p>
+          <button onclick="openPricingModal()" class="btn-primary">Upgrade Now</button>
+        </div>
 
         <!-- decision-engine-v2 -->
         <section id="result" class="dashboard-grid hidden">

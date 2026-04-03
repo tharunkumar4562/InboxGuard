@@ -219,6 +219,12 @@ async function refreshAuthStatus() {
         userScansUsed = Number(data && data.user_scans_used ? data.user_scans_used : 0);
         userScansLimit = Number(data && data.user_scans_limit ? data.user_scans_limit : 50);
 
+        // Set window-level user state for Razorpay
+        window.currentUser = isAuthenticated;
+        window.userIsPro = Boolean(data && data.pro);
+        window.currentUserEmail = currentUserEmail;
+        window.currentUserName = currentUserName;
+
         localStorage.setItem("ig_anon_scans_used", String(anonymousScansUsed));
         localStorage.setItem("ig_anon_scans_limit", String(anonymousScansLimit));
         updateProfileNav();
@@ -1297,163 +1303,284 @@ async function runCampaignDiagnosis() {
     diagnosisOutput.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
-if (dashboardTab) {
-    dashboardTab.addEventListener("click", () => activateTab("dashboard"));
-}
-if (threatScanTab) {
-    threatScanTab.addEventListener("click", () => activateTab("threat-scan"));
-}
-if (startButton) {
-    startButton.addEventListener("click", () => {
-        if (rawEmailInput) {
-            rawEmailInput.scrollIntoView({ behavior: "smooth", block: "center" });
-            setTimeout(() => rawEmailInput.focus(), 160);
-        }
-        activateTab("threat-scan");
-        trackEvent("start_clicked", { destination: "email_input" });
-    });
-}
-if (accessButton) {
-    accessButton.addEventListener("click", (event) => {
-        event.preventDefault();
-        if (!isAuthenticated) {
-            pendingAuthRedirectPath = "/pricing";
-            showAuthModal();
-            trackEvent("get_access_clicked", { state: "anon" });
-            return;
-        }
-        trackEvent("get_access_clicked", { state: "authenticated" });
-        window.location.href = "/pricing";
-    });
-}
-if (fixNowButton) {
-    fixNowButton.addEventListener("click", () => {
-        const payload = new FormData();
-        payload.set("event", "rewrite_clicked");
-        fetch("/track", { method: "POST", body: payload }).catch(() => null);
+// ===== RAZORPAY PAYMENT INTEGRATION =====
+window.currentUser = isAuthenticated;
 
-        pendingAction = "fix";
-        runPendingAction();
-    });
+function openPricingModal() {
+    const modal = document.getElementById("pricing-modal");
+    if (modal) {
+        modal.classList.remove("hidden");
+    }
 }
-if (riskFixNowButton) {
-    riskFixNowButton.addEventListener("click", () => {
-        trackEvent("fix_clicked", { source: "risk_fix_now" });
-        pendingAction = "fix";
-        runPendingAction();
-    });
+
+function closePricingModal() {
+    const modal = document.getElementById("pricing-modal");
+    if (modal) {
+        modal.classList.add("hidden");
+    }
 }
-if (postFixAccessButton) {
-    postFixAccessButton.addEventListener("click", () => {
-        if (!isAuthenticated) {
-            pendingAuthRedirectPath = "/pricing";
-            showAuthModal();
-            trackEvent("post_fix_access_clicked", { state: "anon" });
-            return;
+
+function handleGetAccess() {
+    if (!window.currentUser) {
+        openAuthModal();
+    } else {
+        openPricingModal();
+    }
+}
+
+function canUserScan() {
+    // Refresh auth status first
+    if (!isAuthenticated) {
+        return true; // Anonymous users get 1 free scan
+    }
+
+    // Check if user is pro
+    if (window.userIsPro) {
+        return true;
+    }
+
+    // Check if user has used their free scans
+    if (userScansUsed >= 1) {
+        showPaywall();
+        return false;
+    }
+
+    return true;
+}
+
+function showPaywall() {
+    const paywall = document.getElementById("paywall");
+    if (paywall) {
+        paywall.classList.remove("hidden");
+    }
+}
+
+async function activatePro(paymentId) {
+    try {
+        const res = await fetch("/activate-pro", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                payment_id: paymentId,
+            }),
+        });
+
+        const data = await res.json();
+
+        if (data.success) {
+            window.userIsPro = true;
+            trackEvent("pro_activated", { payment_id: paymentId });
+            showError("✅ Pro activated! Reload to continue.");
+            setTimeout(() => {
+                location.reload();
+            }, 1500);
+        } else {
+            showError("Activation failed: " + (data.detail || "Unknown error"));
         }
-        trackEvent("post_fix_access_clicked", { state: "authenticated" });
-        window.location.href = "/pricing";
-    });
+    } catch (error) {
+        showError("Error activating pro: " + (error.message || "Network error"));
+    }
 }
-if (useFixedButton) {
-    useFixedButton.addEventListener("click", useFixedVersion);
+
+function startPayment() {
+    // Fetch Razorpay key from server
+    fetch("/config")
+        .then(res => res.json())
+        .then(config => {
+            const razorpayKey = config.razorpay_key;
+            if (!razorpayKey) {
+                showError("Payment system not configured. Please try again later.");
+                return;
+            }
+
+            const options = {
+                key: razorpayKey,
+                amount: 99900, // ₹999 in paise
+                currency: "INR",
+                name: "InboxGuard",
+                description: "Pro Plan - Unlimited Scans",
+                handler: async function (response) {
+                    await activatePro(response.razorpay_payment_id);
+                },
+                prefill: {
+                    email: currentUserEmail || "",
+                    name: currentUserName || "",
+                },
+            };
+
+            if (typeof Razorpay !== "undefined") {
+                const rzp = new Razorpay(options);
+                rzp.open();
+            } else {
+                showError("Payment system not available. Please try again.");
+            }
+        })
+        .catch(err => {
+            showError("Could not load payment configuration: " + err.message);
+        });
 }
-if (sendGmailButton) {
-    sendGmailButton.addEventListener("click", openInGmail);
+
+// Wire up the pay button
+if (document.getElementById("pay-btn")) {
+    document.getElementById("pay-btn").onclick = function () {
+        startPayment();
+    };
 }
-if (restoreOriginalButton) {
-    restoreOriginalButton.addEventListener("click", restoreOriginalDraft);
-}
-if (editManualButton) {
-    editManualButton.addEventListener("click", editManually);
-}
-if (feedbackInboxButton) {
-    feedbackInboxButton.addEventListener("click", () => sendFeedback("inbox"));
-}
-if (feedbackSpamButton) {
-    feedbackSpamButton.addEventListener("click", () => sendFeedback("spam"));
-}
-if (feedbackUnsureButton) {
-    feedbackUnsureButton.addEventListener("click", () => sendFeedback("not_sure"));
-}
-if (runDiagnosisButton) {
-    runDiagnosisButton.addEventListener("click", () => {
-        runCampaignDiagnosis().catch((error) => {
-            showError(error && error.message ? error.message : "Could not diagnose campaign.");
+
+if (dashboardTab) {
+    if (threatScanTab) {
+        threatScanTab.addEventListener("click", () => activateTab("threat-scan"));
+    }
+    if (startButton) {
+        startButton.addEventListener("click", () => {
+            if (rawEmailInput) {
+                rawEmailInput.scrollIntoView({ behavior: "smooth", block: "center" });
+                setTimeout(() => rawEmailInput.focus(), 160);
+            }
+            activateTab("threat-scan");
+            trackEvent("start_clicked", { destination: "email_input" });
+        });
+    }
+    if (accessButton) {
+        accessButton.addEventListener("click", (event) => {
+            event.preventDefault();
+            handleGetAccess();
+        });
+    }
+    if (fixNowButton) {
+        fixNowButton.addEventListener("click", () => {
+            const payload = new FormData();
+            payload.set("event", "rewrite_clicked");
+            fetch("/track", { method: "POST", body: payload }).catch(() => null);
+
+            pendingAction = "fix";
+            runPendingAction();
+        });
+    }
+    if (riskFixNowButton) {
+        riskFixNowButton.addEventListener("click", () => {
+            trackEvent("fix_clicked", { source: "risk_fix_now" });
+            pendingAction = "fix";
+            runPendingAction();
+        });
+    }
+    if (postFixAccessButton) {
+        postFixAccessButton.addEventListener("click", () => {
+            if (!isAuthenticated) {
+                pendingAuthRedirectPath = "/pricing";
+                showAuthModal();
+                trackEvent("post_fix_access_clicked", { state: "anon" });
+                return;
+            }
+            trackEvent("post_fix_access_clicked", { state: "authenticated" });
+            window.location.href = "/pricing";
+        });
+    }
+    if (useFixedButton) {
+        useFixedButton.addEventListener("click", useFixedVersion);
+    }
+    if (sendGmailButton) {
+        sendGmailButton.addEventListener("click", openInGmail);
+    }
+    if (restoreOriginalButton) {
+        restoreOriginalButton.addEventListener("click", restoreOriginalDraft);
+    }
+    if (editManualButton) {
+        editManualButton.addEventListener("click", editManually);
+    }
+    if (feedbackInboxButton) {
+        feedbackInboxButton.addEventListener("click", () => sendFeedback("inbox"));
+    }
+    if (feedbackSpamButton) {
+        feedbackSpamButton.addEventListener("click", () => sendFeedback("spam"));
+    }
+    if (feedbackUnsureButton) {
+        feedbackUnsureButton.addEventListener("click", () => sendFeedback("not_sure"));
+    }
+    if (runDiagnosisButton) {
+        runDiagnosisButton.addEventListener("click", () => {
+            runCampaignDiagnosis().catch((error) => {
+                showError(error && error.message ? error.message : "Could not diagnose campaign.");
+            });
+        });
+    }
+    if (authSignInButton) {
+        authSignInButton.addEventListener("click", () => handleAuthAction("signin"));
+    }
+    if (authCreateButton) {
+        authCreateButton.addEventListener("click", () => handleAuthAction("create"));
+    }
+    if (authCloseButton) {
+        authCloseButton.addEventListener("click", () => handleAuthAction("close"));
+    }
+    if (authModal) {
+        authModal.addEventListener("click", (event) => {
+            const target = event.target;
+            if (!(target instanceof HTMLElement)) {
+                return;
+            }
+            if (target.id === "auth-modal") {
+                handleAuthAction("close");
+                return;
+            }
+            if (target.id === "auth-signin") {
+                handleAuthAction("signin");
+                return;
+            }
+            if (target.id === "auth-create") {
+                handleAuthAction("create");
+                return;
+            }
+            if (target.id === "auth-close") {
+                handleAuthAction("close");
+            }
+        });
+    }
+
+    if (form) {
+        form.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            if (!canUserScan()) {
+                return;
+            }
+            pendingAction = "analyze";
+            if (needsAuthGate("analyze")) {
+                if (isAuthenticated) {
+                    showError("You reached your monthly free plan scan limit. Upgrade is required for more scans.");
+                    return;
+                }
+                showAuthModal();
+                return;
+            }
+            runPendingAction();
+        });
+    }
+
+    if (rawEmailInput) {
+        rawEmailInput.addEventListener("input", () => {
+            const value = String(rawEmailInput.value || "").trim();
+            if (!emailPastedTracked && value.length >= 20) {
+                emailPastedTracked = true;
+                trackEvent("email_pasted", {
+                    length_bucket: value.length >= 300 ? "300_plus" : value.length >= 120 ? "120_299" : "20_119",
+                });
+            }
+        });
+    }
+
+    document.querySelectorAll("details.secondary-options, details.advanced-block").forEach((detailsNode) => {
+        detailsNode.addEventListener("toggle", () => {
+            if (detailsNode.open && !advancedOpenedTracked) {
+                advancedOpenedTracked = true;
+                trackEvent("advanced_opened", {
+                    section: detailsNode.classList.contains("advanced-block") ? "why_flagged" : "scan_options",
+                });
+            }
         });
     });
 }
-if (authSignInButton) {
-    authSignInButton.addEventListener("click", () => handleAuthAction("signin"));
-}
-if (authCreateButton) {
-    authCreateButton.addEventListener("click", () => handleAuthAction("create"));
-}
-if (authCloseButton) {
-    authCloseButton.addEventListener("click", () => handleAuthAction("close"));
-}
-if (authModal) {
-    authModal.addEventListener("click", (event) => {
-        const target = event.target;
-        if (!(target instanceof HTMLElement)) {
-            return;
-        }
-        if (target.id === "auth-modal") {
-            handleAuthAction("close");
-            return;
-        }
-        if (target.id === "auth-signin") {
-            handleAuthAction("signin");
-            return;
-        }
-        if (target.id === "auth-create") {
-            handleAuthAction("create");
-            return;
-        }
-        if (target.id === "auth-close") {
-            handleAuthAction("close");
-        }
-    });
-}
-
-if (form) {
-    form.addEventListener("submit", async (event) => {
-        event.preventDefault();
-        pendingAction = "analyze";
-        if (needsAuthGate("analyze")) {
-            if (isAuthenticated) {
-                showError("You reached your monthly free plan scan limit. Upgrade is required for more scans.");
-                return;
-            }
-            showAuthModal();
-            return;
-        }
-        runPendingAction();
-    });
-}
-
-if (rawEmailInput) {
-    rawEmailInput.addEventListener("input", () => {
-        const value = String(rawEmailInput.value || "").trim();
-        if (!emailPastedTracked && value.length >= 20) {
-            emailPastedTracked = true;
-            trackEvent("email_pasted", {
-                length_bucket: value.length >= 300 ? "300_plus" : value.length >= 120 ? "120_299" : "20_119",
-            });
-        }
-    });
-}
-
-document.querySelectorAll("details.secondary-options, details.advanced-block").forEach((detailsNode) => {
-    detailsNode.addEventListener("toggle", () => {
-        if (detailsNode.open && !advancedOpenedTracked) {
-            advancedOpenedTracked = true;
-            trackEvent("advanced_opened", {
-                section: detailsNode.classList.contains("advanced-block") ? "why_flagged" : "scan_options",
-            });
-        }
-    });
-});
 
 setIdleState();
 activateTab("dashboard");

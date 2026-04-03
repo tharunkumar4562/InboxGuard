@@ -40,18 +40,6 @@
           </div>
         </section>
 
-        <section class="profile-stat-card upgrade-box">
-          <p class="profile-stat-label">Plan</p>
-          <h3 id="plan-tier" class="profile-stat-value" style="margin-top: 4px;">{{ 'Pro' if profile.is_pro else 'Free' }}</h3>
-          <p id="plan-limit" class="profile-small">Limit: {{ profile.scan_limit }} scan(s) per month</p>
-          <p class="profile-small">Upgrade to unlock unlimited scans, domain tracking, and campaign debugging.</p>
-          {% if profile.is_pro %}
-          <button class="profile-logout" type="button" disabled>Pro Active</button>
-          {% else %}
-          <button class="profile-logout" type="button" onclick="window.location.href='/pricing'">Upgrade to Pro</button>
-          {% endif %}
-        </section>
-
         <section class="profile-stats-grid">
           <article class="profile-stat-card">
             <p class="profile-stat-label">Email Health Score</p>
@@ -106,8 +94,6 @@
         const rewriteNode = document.getElementById("usage-rewrite-clicked");
         const lastActiveNode = document.getElementById("usage-last-active");
         const recentResultsNode = document.getElementById("usage-recent-results");
-        const planTierNode = document.getElementById("plan-tier");
-        const planLimitNode = document.getElementById("plan-limit");
 
         async function refreshProfile() {
           try {
@@ -162,12 +148,6 @@
                   recentResultsNode.appendChild(li);
                 });
               }
-            }
-            if (planTierNode) {
-              planTierNode.textContent = String(profile.is_pro ? "Pro" : "Free");
-            }
-            if (planLimitNode) {
-              planLimitNode.textContent = `Limit: ${String(profile.scan_limit ?? 1)} scan(s) per month`;
             }
           } catch (error) {
             // Keep page stable if refresh fails.

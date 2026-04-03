@@ -6,4 +6,3 @@ dnspython
 itsdangerous
 authlib
 httpx
-stripe

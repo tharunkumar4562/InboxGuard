@@ -47,6 +47,8 @@ STRIPE_SECRET_KEY = os.getenv("INBOXGUARD_STRIPE_SECRET_KEY", os.getenv("STRIPE_
 STRIPE_PRICE_ID = os.getenv("INBOXGUARD_STRIPE_PRICE_ID", os.getenv("STRIPE_PRICE_ID", "")).strip()
 STRIPE_SUCCESS_URL = os.getenv("INBOXGUARD_STRIPE_SUCCESS_URL", f"{SITE_URL}/pricing?checkout=success").strip()
 STRIPE_CANCEL_URL = os.getenv("INBOXGUARD_STRIPE_CANCEL_URL", f"{SITE_URL}/pricing?checkout=cancelled").strip()
+RAZORPAY_KEY = os.getenv("INBOXGUARD_RAZORPAY_KEY", os.getenv("RAZORPAY_KEY", "")).strip()
+RAZORPAY_SECRET = os.getenv("INBOXGUARD_RAZORPAY_SECRET", os.getenv("RAZORPAY_SECRET", "")).strip()
 GOOGLE_VERIFICATION_FILE = "googleab4b33a28d8dfb88.html"
 AUTH_DB_READY = False
 LONG_TAIL_PAGES = [
@@ -506,15 +508,18 @@ def _auth_status_payload(request: Request) -> dict:
         "user_scans_used": 0,
         "user_scans_limit": FREE_USER_SCAN_LIMIT,
         "google_enabled": GOOGLE_AUTH_CONFIGURED,
+        "pro": False,
     }
     if user:
         usage = _get_usage(user["id"])
+        is_pro = bool(user.get("pro", False))
         payload.update(
             {
                 "user_scans_used": usage["scans_used"],
                 "emails_scanned_count": usage["emails_scanned_count"],
                 "rewrite_clicked": usage["rewrite_clicked"],
                 "last_active": usage["last_active"],
+                "pro": is_pro,
             }
         )
     return payload
@@ -650,9 +655,71 @@ def billing_checkout(request: Request):
     return RedirectResponse(url=checkout_url, status_code=303)
 
 
+@app.post("/activate-pro")
+async def activate_pro(request: Request):
+    """Activate PRO plan for authenticated user after payment."""
+    try:
+        data = await request.json()
+    except Exception:
+        return JSONResponse(status_code=400, content={"success": False, "detail": "Invalid JSON"})
+    
+    user = _get_session_user(request)
+    if not user:
+        return JSONResponse(status_code=401, content={"success": False, "detail": "Not authenticated"})
+    
+    payment_id = data.get("payment_id", "").strip()
+    if not payment_id:
+        return JSONResponse(status_code=400, content={"success": False, "detail": "Missing payment_id"})
+    
+    user_id = user["id"]
+    
+    # Ensure pro column exists (migration support)
+    _ensure_auth_db_ready()
+    conn = _auth_db_conn()
+    try:
+        # Add pro column if it doesn't exist
+        conn.execute("PRAGMA table_info(users)")
+        columns = conn.execute("PRAGMA table_info(users)").fetchall()
+        col_names = [col[1] for col in columns]
+        
+        if "pro" not in col_names:
+            conn.execute("ALTER TABLE users ADD COLUMN pro INTEGER DEFAULT 0")
+            conn.commit()
+        
+        # Update user's pro status
+        conn.execute(
+            "UPDATE users SET pro=1 WHERE id=?",
+            (user_id,)
+        )
+        conn.commit()
+        
+        # Track the activation
+        track_event("pro_activated", {
+            "user_id": str(user_id),
+            "email": user["email"],
+            "payment_id": payment_id
+        })
+        
+        return JSONResponse(status_code=200, content={"success": True, "detail": "Pro plan activated"})
+    except Exception as e:
+        logger.error(f"Error activating pro: {e}")
+        return JSONResponse(status_code=500, content={"success": False, "detail": "Failed to activate pro"})
+    finally:
+        conn.close()
+
+
 @app.get("/auth/status")
 def auth_status(request: Request):
     return _auth_status_payload(request)
+
+
+@app.get("/config")
+def get_config():
+    """Return public client-side configuration."""
+    return {
+        "razorpay_key": RAZORPAY_KEY,
+        "google_enabled": GOOGLE_AUTH_CONFIGURED,
+    }
 
 
 @app.get("/auth/me")
