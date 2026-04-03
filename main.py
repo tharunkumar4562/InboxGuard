@@ -581,8 +581,8 @@ def home(request: Request):
         request,
         "index.html",
         {
-            "page_title": "InboxGuard | Your cold email looked fine. Gmail disagreed.",
-            "meta_description": "Find out why emails that look fine still land in spam. Fix risky drafts before you hit send and protect your domain.",
+            "page_title": "InboxGuard | Pre-send email risk system",
+            "meta_description": "Know if your email will land in inbox or spam before you hit send. Fix risky drafts, protect your domain, and avoid silent campaign failure.",
             "canonical_url": f"{SITE_URL}/",
             "focus_query": "why did my email go to spam",
         },
