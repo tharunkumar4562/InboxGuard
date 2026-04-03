@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-WXGNG9TEFK"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+
+      gtag('config', 'G-WXGNG9TEFK');
+    </script>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{ page_title }}</title>
+    <meta name="description" content="{{ meta_description }}" />
+    <link rel="canonical" href="{{ canonical_url }}" />
+    <link rel="icon" href="/static/favicon-48.png" type="image/png" sizes="48x48" />
+    <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" sizes="any" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/static/css/styles.css" />
+  </head>
+  <body>
+    <main class="pricing-container">
+      <p class="workflow-step">InboxGuard Pricing</p>
+      <h1>Stop guessing. Know before you send.</h1>
+      <p class="sub">Catch deliverability risk before it costs replies and domain reputation.</p>
+
+      <section class="pricing-grid">
+        <article class="plan free">
+          <h2>Free</h2>
+          <p class="price">$0</p>
+          <ul class="plan-list">
+            <li>1 email scan per month</li>
+            <li>1 automatic fix</li>
+            <li>Basic explanation</li>
+          </ul>
+          {% if is_pro %}
+          <button disabled class="btn-secondary">Used previously</button>
+          {% else %}
+          <button disabled class="btn-secondary">Current plan</button>
+          {% endif %}
+        </article>
+
+        <article class="plan pro">
+          <h2>Pro</h2>
+          <p class="price">${{ pro_price_usd }}/month</p>
+          <ul class="plan-list">
+            <li>Unlimited scans</li>
+            <li>Unlimited fixes</li>
+            <li>Saved history</li>
+            <li>Domain risk tracking</li>
+            <li>Campaign debugger</li>
+          </ul>
+          {% if is_pro %}
+          <button disabled class="btn-primary">Pro active</button>
+          {% elif billing_ready %}
+          <button id="upgrade-btn" class="btn-primary">Upgrade now</button>
+          {% else %}
+          <button disabled class="btn-primary">Billing unavailable</button>
+          {% endif %}
+        </article>
+      </section>
+
+      <p id="pricing-msg" class="micro" style="margin-top: 14px;"></p>
+      <p class="micro" style="margin-top: 8px;"><a class="access-link" href="/">Back to scanner</a></p>
+    </main>
+
+    <script src="/static/js/pricing.js"></script>
+  </body>
+</html>

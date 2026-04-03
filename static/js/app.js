@@ -134,6 +134,13 @@ function sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function goToPricing(reason) {
+    if (reason) {
+        trackEvent("paywall_viewed", { reason });
+    }
+    window.location.href = "/pricing";
+}
+
 function setTabFeedback(message) {
     if (tabFeedbackNode) {
         tabFeedbackNode.textContent = message;
@@ -1087,8 +1094,9 @@ async function runAnalyze() {
                 showAuthModal();
                 throw new Error("Sign in to continue scanning.");
             }
-            if (code === "FREE_PLAN_LIMIT_REACHED") {
-                throw new Error("You reached your monthly free plan scan limit. Upgrade is required for more scans.");
+            if (code === "FREE_PLAN_LIMIT_REACHED" || code === "PRO_REQUIRED") {
+                setTimeout(() => goToPricing("scan_limit"), 50);
+                throw new Error("Free plan limit reached. Upgrade to continue scanning.");
             }
             throw new Error("Unable to complete risk scan. Try again.");
         }
@@ -1254,6 +1262,12 @@ async function runCampaignDiagnosis() {
     });
 
     if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        const code = String(err.detail || "");
+        if (code === "PRO_REQUIRED") {
+            setTimeout(() => goToPricing("campaign_debugger_locked"), 50);
+            throw new Error("Campaign debugger is available on Pro.");
+        }
         throw new Error("Could not diagnose campaign.");
     }
 
@@ -1306,13 +1320,8 @@ if (startButton) {
 if (accessButton) {
     accessButton.addEventListener("click", (event) => {
         event.preventDefault();
-        if (!isAuthenticated) {
-            showAuthModal();
-            trackEvent("get_access_clicked", { state: "anon" });
-            return;
-        }
-        trackEvent("get_access_clicked", { state: "authenticated" });
-        window.location.href = "/dashboard";
+        trackEvent("get_access_clicked", { state: isAuthenticated ? "authenticated" : "anon" });
+        goToPricing("topbar_get_access");
     });
 }
 if (fixNowButton) {
@@ -1334,13 +1343,8 @@ if (riskFixNowButton) {
 }
 if (postFixAccessButton) {
     postFixAccessButton.addEventListener("click", () => {
-        if (!isAuthenticated) {
-            showAuthModal();
-            trackEvent("post_fix_access_clicked", { state: "anon" });
-            return;
-        }
-        trackEvent("post_fix_access_clicked", { state: "authenticated" });
-        window.location.href = "/dashboard";
+        trackEvent("post_fix_access_clicked", { state: isAuthenticated ? "authenticated" : "anon" });
+        goToPricing("post_fix_gate");
     });
 }
 if (useFixedButton) {
