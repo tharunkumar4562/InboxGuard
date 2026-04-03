@@ -9,10 +9,6 @@ import hashlib
 import secrets
 import sqlite3
 from typing import Any, Optional
-try:
-    import stripe
-except ImportError:  # pragma: no cover - optional until dependency install
-    stripe = None
 
 from fastapi import FastAPI, Form, Request, HTTPException
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, Response, JSONResponse, FileResponse
@@ -42,15 +38,15 @@ ADMIN_TOKEN = os.getenv("INBOXGUARD_ADMIN_TOKEN", "")
 SESSION_SECRET = os.getenv("INBOXGUARD_SESSION_SECRET", "change-me-in-production")
 SESSION_HTTPS_ONLY = os.getenv("INBOXGUARD_SESSION_HTTPS_ONLY", "0").strip().lower() in {"1", "true", "yes"}
 AUTH_DB_FILE = BASE_DIR / "data" / "auth.db"
-ANON_SCAN_LIMIT = int(os.getenv("INBOXGUARD_ANON_SCAN_LIMIT", "1"))
-FREE_USER_SCAN_LIMIT = int(os.getenv("INBOXGUARD_FREE_USER_SCAN_LIMIT", "1"))
-PRO_USER_SCAN_LIMIT = int(os.getenv("INBOXGUARD_PRO_USER_SCAN_LIMIT", "1000000"))
-STRIPE_SECRET_KEY = os.getenv("INBOXGUARD_STRIPE_SECRET_KEY", os.getenv("STRIPE_SECRET_KEY", "")).strip()
-STRIPE_PRICE_ID = os.getenv("INBOXGUARD_STRIPE_PRICE_ID", os.getenv("STRIPE_PRICE_ID", "")).strip()
-STRIPE_PRO_PRICE_USD = int(os.getenv("INBOXGUARD_STRIPE_PRO_PRICE_USD", "1500"))
+ANON_SCAN_LIMIT = int(os.getenv("INBOXGUARD_ANON_SCAN_LIMIT", "3"))
+FREE_USER_SCAN_LIMIT = int(os.getenv("INBOXGUARD_FREE_USER_SCAN_LIMIT", "50"))
 GOOGLE_OAUTH_ENABLED = os.getenv("INBOXGUARD_GOOGLE_OAUTH_ENABLED", "0").strip().lower() in {"1", "true", "yes"}
 GOOGLE_CLIENT_ID = os.getenv("INBOXGUARD_GOOGLE_CLIENT_ID", os.getenv("GOOGLE_CLIENT_ID", "")).strip()
 GOOGLE_CLIENT_SECRET = os.getenv("INBOXGUARD_GOOGLE_CLIENT_SECRET", os.getenv("GOOGLE_CLIENT_SECRET", "")).strip()
+STRIPE_SECRET_KEY = os.getenv("INBOXGUARD_STRIPE_SECRET_KEY", os.getenv("STRIPE_SECRET_KEY", "")).strip()
+STRIPE_PRICE_ID = os.getenv("INBOXGUARD_STRIPE_PRICE_ID", os.getenv("STRIPE_PRICE_ID", "")).strip()
+STRIPE_SUCCESS_URL = os.getenv("INBOXGUARD_STRIPE_SUCCESS_URL", f"{SITE_URL}/pricing?checkout=success").strip()
+STRIPE_CANCEL_URL = os.getenv("INBOXGUARD_STRIPE_CANCEL_URL", f"{SITE_URL}/pricing?checkout=cancelled").strip()
 GOOGLE_VERIFICATION_FILE = "googleab4b33a28d8dfb88.html"
 AUTH_DB_READY = False
 LONG_TAIL_PAGES = [
@@ -88,9 +84,6 @@ if GOOGLE_AUTH_CONFIGURED:
         client_kwargs={"scope": "openid email profile"},
     )
 
-if stripe and STRIPE_SECRET_KEY:
-    stripe.api_key = STRIPE_SECRET_KEY
-
 
 def _auth_db_conn() -> sqlite3.Connection:
     AUTH_DB_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -109,9 +102,6 @@ def _ensure_auth_db() -> None:
                 email TEXT UNIQUE NOT NULL,
                 password_hash TEXT NOT NULL,
                 password_salt TEXT NOT NULL,
-                plan_tier TEXT NOT NULL DEFAULT 'free',
-                stripe_customer_id TEXT,
-                stripe_subscription_id TEXT,
                 created_at TEXT NOT NULL,
                 last_active TEXT NOT NULL
             )
@@ -136,7 +126,6 @@ def _ensure_auth_db() -> None:
                 anon_id TEXT NOT NULL,
                 period_key TEXT NOT NULL,
                 scans_used INTEGER NOT NULL DEFAULT 0,
-                rewrites_used INTEGER NOT NULL DEFAULT 0,
                 last_scan TEXT,
                 PRIMARY KEY (anon_id, period_key)
             )
@@ -167,18 +156,6 @@ def _ensure_auth_db() -> None:
             )
             """
         )
-
-        migrations = [
-            "ALTER TABLE users ADD COLUMN plan_tier TEXT NOT NULL DEFAULT 'free'",
-            "ALTER TABLE users ADD COLUMN stripe_customer_id TEXT",
-            "ALTER TABLE users ADD COLUMN stripe_subscription_id TEXT",
-            "ALTER TABLE anon_usage ADD COLUMN rewrites_used INTEGER NOT NULL DEFAULT 0",
-        ]
-        for statement in migrations:
-            try:
-                conn.execute(statement)
-            except sqlite3.OperationalError:
-                pass
         conn.commit()
     finally:
         conn.close()
@@ -261,47 +238,6 @@ def _increment_anon_scan(request: Request) -> int:
             (anon_id, period),
         ).fetchone()
         return int(row["scans_used"]) if row else 0
-    finally:
-        conn.close()
-
-
-def _get_anon_rewrites_used(request: Request) -> int:
-    _ensure_auth_db_ready()
-    anon_id = _get_or_create_anon_id(request)
-    conn = _auth_db_conn()
-    try:
-        row = conn.execute(
-            "SELECT rewrites_used FROM anon_usage WHERE anon_id=? AND period_key=?",
-            (anon_id, _period_key()),
-        ).fetchone()
-        return int(row["rewrites_used"]) if row else 0
-    finally:
-        conn.close()
-
-
-def _increment_anon_rewrite(request: Request) -> int:
-    _ensure_auth_db_ready()
-    anon_id = _get_or_create_anon_id(request)
-    now = _now_iso()
-    period = _period_key()
-    conn = _auth_db_conn()
-    try:
-        conn.execute(
-            """
-            INSERT INTO anon_usage(anon_id, period_key, scans_used, rewrites_used, last_scan)
-            VALUES (?, ?, 0, 1, ?)
-            ON CONFLICT(anon_id, period_key) DO UPDATE SET
-                rewrites_used = rewrites_used + 1,
-                last_scan = excluded.last_scan
-            """,
-            (anon_id, period, now),
-        )
-        conn.commit()
-        row = conn.execute(
-            "SELECT rewrites_used FROM anon_usage WHERE anon_id=? AND period_key=?",
-            (anon_id, period),
-        ).fetchone()
-        return int(row["rewrites_used"]) if row else 0
     finally:
         conn.close()
 
@@ -525,48 +461,16 @@ def _increment_rewrite_clicked(user_id: int) -> None:
         conn.close()
 
 
-def _is_user_pro(user_id: int) -> bool:
-    _ensure_auth_db_ready()
-    conn = _auth_db_conn()
-    try:
-        row = conn.execute("SELECT plan_tier FROM users WHERE id=?", (user_id,)).fetchone()
-        if not row:
-            return False
-        return str(row["plan_tier"] or "free").strip().lower() == "pro"
-    finally:
-        conn.close()
-
-
-def _set_user_pro(user_id: int, stripe_customer_id: str = "", stripe_subscription_id: str = "") -> None:
-    _ensure_auth_db_ready()
-    now = _now_iso()
-    conn = _auth_db_conn()
-    try:
-        conn.execute(
-            """
-            UPDATE users
-            SET plan_tier='pro', stripe_customer_id=?, stripe_subscription_id=?, last_active=?
-            WHERE id=?
-            """,
-            (stripe_customer_id or None, stripe_subscription_id or None, now, user_id),
-        )
-        conn.commit()
-    finally:
-        conn.close()
-
-
 def _get_session_user(request: Request):
     user_id = int(request.session.get("user_id", 0) or 0)
     email = str(request.session.get("user_email", "")).strip().lower()
     if user_id <= 0 or not email:
         return None
-    session_is_pro = bool(request.session.get("is_pro", False))
     return {
         "id": user_id,
         "email": email,
         "name": str(request.session.get("user_name", "")).strip(),
         "picture": str(request.session.get("user_picture", "")).strip(),
-        "is_pro": session_is_pro,
     }
 
 
@@ -583,28 +487,24 @@ def _avatar_url_for_email(email: str) -> str:
 
 
 def _set_session_user(request: Request, user_id: int, email: str, name: str = "", picture: str = "") -> None:
-    is_pro = _is_user_pro(user_id)
     request.session["user_id"] = user_id
     request.session["user_email"] = email
     request.session["user_name"] = name.strip() or _display_name_from_email(email)
     request.session["user_picture"] = picture.strip() or _avatar_url_for_email(email)
-    request.session["is_pro"] = is_pro
 
 
 def _auth_status_payload(request: Request) -> dict:
     user = _get_session_user(request)
     anon_used = _get_anon_scans_used(request)
-    is_pro = bool(user and user.get("is_pro"))
     payload = {
         "authenticated": bool(user),
-        "is_pro": is_pro,
         "email": user["email"] if user else "",
         "name": user["name"] if user else "",
         "avatar_url": user["picture"] if user else "",
         "anonymous_scans_used": anon_used,
         "anonymous_scans_limit": ANON_SCAN_LIMIT,
         "user_scans_used": 0,
-        "user_scans_limit": PRO_USER_SCAN_LIMIT if is_pro else FREE_USER_SCAN_LIMIT,
+        "user_scans_limit": FREE_USER_SCAN_LIMIT,
         "google_enabled": GOOGLE_AUTH_CONFIGURED,
     }
     if user:
@@ -685,8 +585,8 @@ def home(request: Request):
         request,
         "index.html",
         {
-            "page_title": "InboxGuard | Last check before you hit send",
-            "meta_description": "Know if your email will land in inbox before sending. Catch risk early and protect domain reputation.",
+            "page_title": "InboxGuard | Last check before you hit send.",
+            "meta_description": "Know if your email will land in inbox before sending. Fix risky drafts before you hit send and protect your domain.",
             "canonical_url": f"{SITE_URL}/",
             "focus_query": "why did my email go to spam",
         },
@@ -706,85 +606,48 @@ def access_page(request: Request):
 @app.get("/pricing", response_class=HTMLResponse)
 def pricing_page(request: Request):
     user = _get_session_user(request)
-    is_pro = bool(user and user.get("is_pro"))
+    authenticated = bool(user)
     return render_template_safe(
         request,
         "pricing.html",
         {
-            "page_title": "Pricing | InboxGuard",
-            "meta_description": "Choose a plan to unlock InboxGuard Pro scans, tracking, and diagnostics.",
+            "page_title": "InboxGuard Pricing | Stop guessing. Know before you send.",
+            "meta_description": "Upgrade to InboxGuard Pro for unlimited scans, saved history, batch testing, and domain tracking.",
             "canonical_url": f"{SITE_URL}/pricing",
-            "is_pro": is_pro,
-            "pro_price_usd": f"{STRIPE_PRO_PRICE_USD / 100:.0f}",
-            "billing_ready": bool(stripe and STRIPE_SECRET_KEY),
+            "authenticated": authenticated,
+            "user_email": user["email"] if user else "",
+            "google_enabled": GOOGLE_AUTH_CONFIGURED,
+            "checkout_status": request.query_params.get("checkout", ""),
+            "checkout_ready": bool(STRIPE_SECRET_KEY and STRIPE_PRICE_ID),
         },
     )
 
 
-@app.post("/create-checkout-session")
-def create_checkout_session(request: Request):
+@app.post("/billing/checkout")
+def billing_checkout(request: Request):
     user = _get_session_user(request)
     if not user:
-        raise HTTPException(status_code=401, detail="AUTH_REQUIRED")
-    if user.get("is_pro"):
-        return {"url": f"{SITE_URL}/profile?upgraded=1"}
-    if not stripe or not STRIPE_SECRET_KEY:
-        raise HTTPException(status_code=503, detail="BILLING_NOT_CONFIGURED")
+        return JSONResponse(status_code=401, content={"ok": False, "detail": "Not authenticated"})
 
-    session_args: dict[str, Any] = {
-        "payment_method_types": ["card"],
-        "mode": "subscription",
-        "success_url": f"{SITE_URL}/billing/success?session_id={{CHECKOUT_SESSION_ID}}",
-        "cancel_url": f"{SITE_URL}/pricing?canceled=1",
-        "client_reference_id": str(user["id"]),
-        "customer_email": user["email"],
-    }
-    if STRIPE_PRICE_ID:
-        session_args["line_items"] = [{"price": STRIPE_PRICE_ID, "quantity": 1}]
-    else:
-        session_args["line_items"] = [
-            {
-                "price_data": {
-                    "currency": "usd",
-                    "product_data": {"name": "InboxGuard Pro"},
-                    "unit_amount": STRIPE_PRO_PRICE_USD,
-                    "recurring": {"interval": "month"},
-                },
-                "quantity": 1,
-            }
-        ]
+    if not STRIPE_SECRET_KEY or not STRIPE_PRICE_ID:
+        return RedirectResponse(url="/pricing?checkout=unavailable", status_code=303)
 
-    checkout = stripe.checkout.Session.create(**session_args)
-    track_event("checkout_started", {"target": "pricing", "mode": "subscription"})
-    return {"url": str(checkout.url)}
+    import stripe
 
-
-@app.get("/billing/success")
-def billing_success(request: Request, session_id: str = ""):
-    user = _get_session_user(request)
-    if not user:
-        return RedirectResponse(url="/?auth=1", status_code=303)
-    if not session_id:
-        return RedirectResponse(url="/pricing?status=missing", status_code=303)
-    if not stripe or not STRIPE_SECRET_KEY:
-        return RedirectResponse(url="/pricing?status=billing-not-ready", status_code=303)
-
-    try:
-        checkout = stripe.checkout.Session.retrieve(session_id)
-    except Exception:
-        return RedirectResponse(url="/pricing?status=verify-failed", status_code=303)
-
-    status = str(getattr(checkout, "status", "") or "")
-    payment_status = str(getattr(checkout, "payment_status", "") or "")
-    if status != "complete" and payment_status != "paid":
-        return RedirectResponse(url="/pricing?status=unpaid", status_code=303)
-
-    stripe_customer_id = str(getattr(checkout, "customer", "") or "")
-    stripe_subscription_id = str(getattr(checkout, "subscription", "") or "")
-    _set_user_pro(user["id"], stripe_customer_id, stripe_subscription_id)
-    request.session["is_pro"] = True
-    track_event("checkout_completed", {"target": "pricing", "mode": "subscription"})
-    return RedirectResponse(url="/profile?upgraded=1", status_code=303)
+    stripe.api_key = STRIPE_SECRET_KEY
+    session = stripe.checkout.Session.create(
+        mode="subscription",
+        customer_email=user["email"],
+        line_items=[{"price": STRIPE_PRICE_ID, "quantity": 1}],
+        success_url=STRIPE_SUCCESS_URL,
+        cancel_url=STRIPE_CANCEL_URL,
+        metadata={"user_id": str(user["id"]), "email": user["email"]},
+    )
+    checkout_url = getattr(session, "url", None)
+    if not checkout_url:
+        return RedirectResponse(url="/pricing?checkout=unavailable", status_code=303)
+    track_event("checkout_started", {"user_id": str(user["id"]), "email": user["email"]})
+    return RedirectResponse(url=checkout_url, status_code=303)
 
 
 @app.get("/auth/status")
@@ -799,7 +662,6 @@ def auth_me(request: Request):
         raise HTTPException(status_code=401, detail="Not authenticated")
 
     usage = _get_usage(user["id"])
-    is_pro = _is_user_pro(user["id"])
     recent_results = _recent_user_feedback(user["id"], limit=5)
     streak_days = _user_streak_days(user["id"])
     health_score = _health_score(usage, recent_results)
@@ -809,9 +671,6 @@ def auth_me(request: Request):
             "name": user["name"] or _display_name_from_email(user["email"]),
             "email": user["email"],
             "avatar_url": user["picture"] or _avatar_url_for_email(user["email"]),
-            "is_pro": is_pro,
-            "plan_tier": "pro" if is_pro else "free",
-            "scan_limit": PRO_USER_SCAN_LIMIT if is_pro else FREE_USER_SCAN_LIMIT,
             "scans_used": usage["scans_used"],
             "emails_scanned_count": usage["emails_scanned_count"],
             "rewrite_clicked": usage["rewrite_clicked"],
@@ -830,7 +689,6 @@ def profile_page(request: Request):
         return RedirectResponse(url="/?auth=1", status_code=303)
 
     usage = _get_usage(user["id"])
-    is_pro = _is_user_pro(user["id"])
     recent_results = _recent_user_feedback(user["id"], limit=5)
     streak_days = _user_streak_days(user["id"])
     health_score = _health_score(usage, recent_results)
@@ -838,9 +696,6 @@ def profile_page(request: Request):
         "name": user["name"] or _display_name_from_email(user["email"]),
         "email": user["email"],
         "avatar_url": user["picture"] or _avatar_url_for_email(user["email"]),
-        "is_pro": is_pro,
-        "plan_tier": "pro" if is_pro else "free",
-        "scan_limit": PRO_USER_SCAN_LIMIT if is_pro else FREE_USER_SCAN_LIMIT,
         "scans_used": usage["scans_used"],
         "emails_scanned_count": usage["emails_scanned_count"],
         "rewrite_clicked": usage["rewrite_clicked"],
@@ -1077,15 +932,13 @@ def analyze(
 
     user = _get_session_user(request)
     if user:
-        is_pro = bool(user.get("is_pro")) or _is_user_pro(user["id"])
-        scan_limit = PRO_USER_SCAN_LIMIT if is_pro else FREE_USER_SCAN_LIMIT
         usage = _get_usage(user["id"])
-        if usage["scans_used"] >= scan_limit:
-            raise HTTPException(status_code=402, detail="PRO_REQUIRED")
+        if usage["scans_used"] >= FREE_USER_SCAN_LIMIT:
+            raise HTTPException(status_code=402, detail="FREE_PLAN_LIMIT_REACHED")
     else:
         anon_used = _get_anon_scans_used(request)
         if anon_used >= ANON_SCAN_LIMIT:
-            raise HTTPException(status_code=402, detail="PRO_REQUIRED")
+            raise HTTPException(status_code=401, detail="AUTH_REQUIRED")
 
     track_event("analyze_request", {"mode": mode, "auth": "user" if user else "anon"})
 
@@ -1100,12 +953,10 @@ def analyze(
     result["learning_profile"] = get_learning_profile()
     if user:
         user_scans = _increment_user_scan(user["id"])
-        is_pro = bool(user.get("is_pro")) or _is_user_pro(user["id"])
         result["usage"] = {
             "authenticated": True,
-            "is_pro": is_pro,
             "user_scans_used": user_scans,
-            "user_scans_limit": PRO_USER_SCAN_LIMIT if is_pro else FREE_USER_SCAN_LIMIT,
+            "user_scans_limit": FREE_USER_SCAN_LIMIT,
         }
     else:
         anon_scans = _increment_anon_scan(request)
@@ -1119,16 +970,11 @@ def analyze(
 
 @app.post("/diagnose-campaign")
 def diagnose_campaign(
-    request: Request,
     open_rate: float = Form(0.0),
     reply_rate: float = Form(0.0),
     bounce_rate: float = Form(0.0),
     sent_count: int = Form(0),
 ):
-    user = _get_session_user(request)
-    if not user or not (bool(user.get("is_pro")) or _is_user_pro(user["id"])):
-        raise HTTPException(status_code=402, detail="PRO_REQUIRED")
-
     o = max(0.0, min(100.0, float(open_rate or 0.0)))
     r = max(0.0, min(100.0, float(reply_rate or 0.0)))
     b = max(0.0, min(100.0, float(bounce_rate or 0.0)))

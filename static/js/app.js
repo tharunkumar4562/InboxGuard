@@ -110,6 +110,7 @@ let currentUserEmail = "";
 let currentUserAvatar = "";
 let emailPastedTracked = false;
 let advancedOpenedTracked = false;
+let pendingAuthRedirectPath = "";
 
 const errorBanner = document.createElement("div");
 errorBanner.id = "error-banner";
@@ -134,13 +135,6 @@ function sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function goToPricing(reason) {
-    if (reason) {
-        trackEvent("paywall_viewed", { reason });
-    }
-    window.location.href = "/pricing";
-}
-
 function setTabFeedback(message) {
     if (tabFeedbackNode) {
         tabFeedbackNode.textContent = message;
@@ -154,7 +148,9 @@ function showAuthModal() {
 
     const msgNode = authModal.querySelector(".micro");
     if (msgNode) {
-        msgNode.textContent = "You've used your free scans. Create a free account or sign in to continue.";
+        msgNode.textContent = pendingAuthRedirectPath
+            ? "Sign in to continue to pricing and unlock checkout."
+            : "You've used your free scans. Create a free account or sign in to continue.";
     }
     authModal.classList.remove("hidden");
 }
@@ -315,6 +311,13 @@ function onAuthSuccess(source) {
     payload.set("target", source || "auth_modal");
     payload.set("mode", "resume_pending_action");
     fetch("/track", { method: "POST", body: payload }).catch(() => null);
+
+    if (!pendingAction && pendingAuthRedirectPath) {
+        const destination = pendingAuthRedirectPath;
+        pendingAuthRedirectPath = "";
+        window.location.href = destination;
+        return;
+    }
 
     runPendingAction();
 }
@@ -1094,9 +1097,8 @@ async function runAnalyze() {
                 showAuthModal();
                 throw new Error("Sign in to continue scanning.");
             }
-            if (code === "FREE_PLAN_LIMIT_REACHED" || code === "PRO_REQUIRED") {
-                setTimeout(() => goToPricing("scan_limit"), 50);
-                throw new Error("Free plan limit reached. Upgrade to continue scanning.");
+            if (code === "FREE_PLAN_LIMIT_REACHED") {
+                throw new Error("You reached your monthly free plan scan limit. Upgrade is required for more scans.");
             }
             throw new Error("Unable to complete risk scan. Try again.");
         }
@@ -1262,12 +1264,6 @@ async function runCampaignDiagnosis() {
     });
 
     if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        const code = String(err.detail || "");
-        if (code === "PRO_REQUIRED") {
-            setTimeout(() => goToPricing("campaign_debugger_locked"), 50);
-            throw new Error("Campaign debugger is available on Pro.");
-        }
         throw new Error("Could not diagnose campaign.");
     }
 
@@ -1320,8 +1316,14 @@ if (startButton) {
 if (accessButton) {
     accessButton.addEventListener("click", (event) => {
         event.preventDefault();
-        trackEvent("get_access_clicked", { state: isAuthenticated ? "authenticated" : "anon" });
-        goToPricing("topbar_get_access");
+        if (!isAuthenticated) {
+            pendingAuthRedirectPath = "/pricing";
+            showAuthModal();
+            trackEvent("get_access_clicked", { state: "anon" });
+            return;
+        }
+        trackEvent("get_access_clicked", { state: "authenticated" });
+        window.location.href = "/pricing";
     });
 }
 if (fixNowButton) {
@@ -1343,8 +1345,14 @@ if (riskFixNowButton) {
 }
 if (postFixAccessButton) {
     postFixAccessButton.addEventListener("click", () => {
-        trackEvent("post_fix_access_clicked", { state: isAuthenticated ? "authenticated" : "anon" });
-        goToPricing("post_fix_gate");
+        if (!isAuthenticated) {
+            pendingAuthRedirectPath = "/pricing";
+            showAuthModal();
+            trackEvent("post_fix_access_clicked", { state: "anon" });
+            return;
+        }
+        trackEvent("post_fix_access_clicked", { state: "authenticated" });
+        window.location.href = "/pricing";
     });
 }
 if (useFixedButton) {

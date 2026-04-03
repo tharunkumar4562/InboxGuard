@@ -773,67 +773,6 @@ select {
     font-weight: 700;
 }
 
-.pricing-container {
-    max-width: 920px;
-    margin: 54px auto;
-    padding: 0 18px 40px;
-    text-align: center;
-}
-
-.pricing-container h1 {
-    margin: 8px 0 8px;
-    font-size: 2rem;
-}
-
-.pricing-container .sub {
-    color: var(--text-secondary);
-    margin: 0;
-}
-
-.pricing-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 14px;
-    margin-top: 24px;
-}
-
-.plan {
-    border-radius: 12px;
-    border: 1px solid var(--border-subtle);
-    background: #0f172a;
-    padding: 20px;
-    text-align: left;
-}
-
-.plan.pro {
-    border-color: #ef4444;
-    box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.18), 0 12px 28px rgba(239, 68, 68, 0.14);
-}
-
-.plan h2 {
-    margin: 0;
-    font-size: 1.25rem;
-}
-
-.price {
-    margin: 6px 0 0;
-    font-size: 1.75rem;
-    font-weight: 800;
-}
-
-.plan-list {
-    margin: 14px 0;
-    padding-left: 18px;
-    color: #cbd5e1;
-    display: grid;
-    gap: 7px;
-}
-
-.upgrade-box {
-    border-color: #2563eb;
-    background: linear-gradient(135deg, #12233b 0%, #0f172a 100%);
-}
-
 .scale-warning .compact-list li {
     background: #121b2d;
 }
@@ -1127,10 +1066,6 @@ select {
     }
 
     .profile-stats-grid {
-        grid-template-columns: 1fr;
-    }
-
-    .pricing-grid {
         grid-template-columns: 1fr;
     }
 }
