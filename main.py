@@ -1,6 +1,7 @@
 from datetime import date, datetime, timedelta, timezone
 from difflib import SequenceMatcher
 from pathlib import Path
+import json
 import logging
 import os
 import re
@@ -10,7 +11,9 @@ import secrets
 import sqlite3
 from typing import Any, Optional
 
-from fastapi import FastAPI, Form, Request, HTTPException
+import httpx
+
+from fastapi import FastAPI, Form, Request, HTTPException, Header
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, Response, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -43,12 +46,11 @@ FREE_USER_SCAN_LIMIT = int(os.getenv("INBOXGUARD_FREE_USER_SCAN_LIMIT", "50"))
 GOOGLE_OAUTH_ENABLED = os.getenv("INBOXGUARD_GOOGLE_OAUTH_ENABLED", "0").strip().lower() in {"1", "true", "yes"}
 GOOGLE_CLIENT_ID = os.getenv("INBOXGUARD_GOOGLE_CLIENT_ID", os.getenv("GOOGLE_CLIENT_ID", "")).strip()
 GOOGLE_CLIENT_SECRET = os.getenv("INBOXGUARD_GOOGLE_CLIENT_SECRET", os.getenv("GOOGLE_CLIENT_SECRET", "")).strip()
-STRIPE_SECRET_KEY = os.getenv("INBOXGUARD_STRIPE_SECRET_KEY", os.getenv("STRIPE_SECRET_KEY", "")).strip()
-STRIPE_PRICE_ID = os.getenv("INBOXGUARD_STRIPE_PRICE_ID", os.getenv("STRIPE_PRICE_ID", "")).strip()
-STRIPE_SUCCESS_URL = os.getenv("INBOXGUARD_STRIPE_SUCCESS_URL", f"{SITE_URL}/pricing?checkout=success").strip()
-STRIPE_CANCEL_URL = os.getenv("INBOXGUARD_STRIPE_CANCEL_URL", f"{SITE_URL}/pricing?checkout=cancelled").strip()
 RAZORPAY_KEY = os.getenv("INBOXGUARD_RAZORPAY_KEY", os.getenv("RAZORPAY_KEY", "")).strip()
 RAZORPAY_SECRET = os.getenv("INBOXGUARD_RAZORPAY_SECRET", os.getenv("RAZORPAY_SECRET", "")).strip()
+RAZORPAY_WEBHOOK_SECRET = os.getenv("INBOXGUARD_RAZORPAY_WEBHOOK_SECRET", os.getenv("RAZORPAY_WEBHOOK_SECRET", "")).strip()
+RAZORPAY_AMOUNT_INR = int(os.getenv("INBOXGUARD_RAZORPAY_AMOUNT_INR", "1200"))
+RAZORPAY_DISPLAY_PRICE_USD = os.getenv("INBOXGUARD_RAZORPAY_DISPLAY_PRICE_USD", "$12").strip()
 GOOGLE_VERIFICATION_FILE = "googleab4b33a28d8dfb88.html"
 AUTH_DB_READY = False
 LONG_TAIL_PAGES = [
@@ -105,7 +107,8 @@ def _ensure_auth_db() -> None:
                 password_hash TEXT NOT NULL,
                 password_salt TEXT NOT NULL,
                 created_at TEXT NOT NULL,
-                last_active TEXT NOT NULL
+                last_active TEXT NOT NULL,
+                pro INTEGER NOT NULL DEFAULT 0
             )
             """
         )
@@ -168,7 +171,24 @@ def _ensure_auth_db_ready() -> None:
     if AUTH_DB_READY:
         return
     _ensure_auth_db()
+    _ensure_user_pro_column()
     AUTH_DB_READY = True
+
+
+def _ensure_user_pro_column(conn: Optional[sqlite3.Connection] = None) -> None:
+    close_conn = False
+    if conn is None:
+        conn = _auth_db_conn()
+        close_conn = True
+    try:
+        columns = conn.execute("PRAGMA table_info(users)").fetchall()
+        column_names = {str(column[1]) for column in columns}
+        if "pro" not in column_names:
+            conn.execute("ALTER TABLE users ADD COLUMN pro INTEGER NOT NULL DEFAULT 0")
+            conn.commit()
+    finally:
+        if close_conn:
+            conn.close()
 
 
 def _now_iso() -> str:
@@ -249,6 +269,15 @@ def _get_user_by_email(email: str):
     conn = _auth_db_conn()
     try:
         return conn.execute("SELECT * FROM users WHERE email=?", (email,)).fetchone()
+    finally:
+        conn.close()
+
+
+def _get_user_by_id(user_id: int):
+    _ensure_auth_db_ready()
+    conn = _auth_db_conn()
+    try:
+        return conn.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
     finally:
         conn.close()
 
@@ -468,11 +497,15 @@ def _get_session_user(request: Request):
     email = str(request.session.get("user_email", "")).strip().lower()
     if user_id <= 0 or not email:
         return None
+    db_user = _get_user_by_id(user_id)
+    if not db_user:
+        return None
     return {
         "id": user_id,
         "email": email,
         "name": str(request.session.get("user_name", "")).strip(),
         "picture": str(request.session.get("user_picture", "")).strip(),
+        "pro": bool(db_user["pro"] if "pro" in db_user.keys() else 0),
     }
 
 
@@ -523,6 +556,17 @@ def _auth_status_payload(request: Request) -> dict:
             }
         )
     return payload
+
+
+def _set_user_pro(user_id: int) -> None:
+    _ensure_auth_db_ready()
+    conn = _auth_db_conn()
+    try:
+        _ensure_user_pro_column(conn)
+        conn.execute("UPDATE users SET pro=1 WHERE id=?", (user_id,))
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def render_template_safe(request: Request, template_name: str, context: dict, status_code: int = 200):
@@ -622,90 +666,107 @@ def pricing_page(request: Request):
             "authenticated": authenticated,
             "user_email": user["email"] if user else "",
             "google_enabled": GOOGLE_AUTH_CONFIGURED,
-            "checkout_status": request.query_params.get("checkout", ""),
-            "checkout_ready": bool(STRIPE_SECRET_KEY and STRIPE_PRICE_ID),
+            "payment_status": request.query_params.get("payment", request.query_params.get("checkout", "")),
+            "payment_ready": bool(RAZORPAY_KEY and RAZORPAY_SECRET),
+            "display_price_usd": RAZORPAY_DISPLAY_PRICE_USD,
+            "charge_currency": "INR",
+            "charge_amount_inr": RAZORPAY_AMOUNT_INR,
         },
     )
 
 
-@app.post("/billing/checkout")
-def billing_checkout(request: Request):
+@app.post("/create-order")
+async def create_order(request: Request):
     user = _get_session_user(request)
     if not user:
         return JSONResponse(status_code=401, content={"ok": False, "detail": "Not authenticated"})
 
-    if not STRIPE_SECRET_KEY or not STRIPE_PRICE_ID:
-        return RedirectResponse(url="/pricing?checkout=unavailable", status_code=303)
+    if not RAZORPAY_KEY or not RAZORPAY_SECRET:
+        return JSONResponse(status_code=503, content={"success": False, "detail": "Payment not configured"})
 
-    import stripe
-
-    stripe.api_key = STRIPE_SECRET_KEY
-    session = stripe.checkout.Session.create(
-        mode="subscription",
-        customer_email=user["email"],
-        line_items=[{"price": STRIPE_PRICE_ID, "quantity": 1}],
-        success_url=STRIPE_SUCCESS_URL,
-        cancel_url=STRIPE_CANCEL_URL,
-        metadata={"user_id": str(user["id"]), "email": user["email"]},
-    )
-    checkout_url = getattr(session, "url", None)
-    if not checkout_url:
-        return RedirectResponse(url="/pricing?checkout=unavailable", status_code=303)
-    track_event("checkout_started", {"user_id": str(user["id"]), "email": user["email"]})
-    return RedirectResponse(url=checkout_url, status_code=303)
-
-
-@app.post("/activate-pro")
-async def activate_pro(request: Request):
-    """Activate PRO plan for authenticated user after payment."""
-    try:
-        data = await request.json()
-    except Exception:
-        return JSONResponse(status_code=400, content={"success": False, "detail": "Invalid JSON"})
-    
-    user = _get_session_user(request)
-    if not user:
-        return JSONResponse(status_code=401, content={"success": False, "detail": "Not authenticated"})
-    
-    payment_id = data.get("payment_id", "").strip()
-    if not payment_id:
-        return JSONResponse(status_code=400, content={"success": False, "detail": "Missing payment_id"})
-    
-    user_id = user["id"]
-    
-    # Ensure pro column exists (migration support)
-    _ensure_auth_db_ready()
-    conn = _auth_db_conn()
-    try:
-        # Add pro column if it doesn't exist
-        conn.execute("PRAGMA table_info(users)")
-        columns = conn.execute("PRAGMA table_info(users)").fetchall()
-        col_names = [col[1] for col in columns]
-        
-        if "pro" not in col_names:
-            conn.execute("ALTER TABLE users ADD COLUMN pro INTEGER DEFAULT 0")
-            conn.commit()
-        
-        # Update user's pro status
-        conn.execute(
-            "UPDATE users SET pro=1 WHERE id=?",
-            (user_id,)
-        )
-        conn.commit()
-        
-        # Track the activation
-        track_event("pro_activated", {
-            "user_id": str(user_id),
+    amount_paise = int(RAZORPAY_AMOUNT_INR) * 100
+    order_payload = {
+        "amount": amount_paise,
+        "currency": "INR",
+        "payment_capture": 1,
+        "notes": {
+            "user_id": str(user["id"]),
             "email": user["email"],
-            "payment_id": payment_id
-        })
-        
-        return JSONResponse(status_code=200, content={"success": True, "detail": "Pro plan activated"})
-    except Exception as e:
-        logger.error(f"Error activating pro: {e}")
-        return JSONResponse(status_code=500, content={"success": False, "detail": "Failed to activate pro"})
-    finally:
-        conn.close()
+        },
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            response = await client.post(
+                "https://api.razorpay.com/v1/orders",
+                auth=(RAZORPAY_KEY, RAZORPAY_SECRET),
+                json=order_payload,
+            )
+    except httpx.HTTPError as error:
+        logger.exception("Razorpay order creation failed: %s", error)
+        return JSONResponse(status_code=502, content={"success": False, "detail": "Could not create order"})
+
+    if response.status_code >= 400:
+        logger.warning("Razorpay order creation failed: status=%s body=%s", response.status_code, response.text)
+        return JSONResponse(status_code=502, content={"success": False, "detail": "Could not create order"})
+
+    data = response.json()
+    order_id = str(data.get("id", "")).strip()
+    if not order_id:
+        return JSONResponse(status_code=502, content={"success": False, "detail": "Could not create order"})
+
+    track_event("checkout_started", {"user_id": str(user["id"]), "email": user["email"], "provider": "razorpay"})
+    return JSONResponse(
+        status_code=200,
+        content={
+            "success": True,
+            "order_id": order_id,
+            "key": RAZORPAY_KEY,
+            "amount": amount_paise,
+            "currency": "INR",
+            "display_price": RAZORPAY_DISPLAY_PRICE_USD,
+            "charge_currency": "INR",
+        },
+    )
+
+
+@app.post("/razorpay-webhook")
+async def razorpay_webhook(request: Request, x_razorpay_signature: str | None = Header(default=None, alias="X-Razorpay-Signature")):
+    if not RAZORPAY_WEBHOOK_SECRET:
+        return JSONResponse(status_code=503, content={"status": "not_configured"})
+
+    body = await request.body()
+    expected_signature = hmac.new(
+        RAZORPAY_WEBHOOK_SECRET.encode("utf-8"),
+        body,
+        hashlib.sha256,
+    ).hexdigest()
+    if not x_razorpay_signature or not hmac.compare_digest(expected_signature, x_razorpay_signature):
+        return JSONResponse(status_code=400, content={"status": "invalid_signature"})
+
+    try:
+        payload = json.loads(body.decode("utf-8") or "{}")
+    except json.JSONDecodeError:
+        return JSONResponse(status_code=400, content={"status": "invalid_json"})
+
+    if str(payload.get("event", "")).strip() != "payment.captured":
+        return JSONResponse(status_code=200, content={"status": "ignored"})
+
+    entity = (payload.get("payload", {}) or {}).get("payment", {}).get("entity", {}) or {}
+    notes = entity.get("notes", {}) or {}
+    user_id = int(notes.get("user_id", 0) or 0)
+    if user_id > 0:
+        _set_user_pro(user_id)
+        track_event(
+            "pro_activated",
+            {
+                "user_id": str(user_id),
+                "payment_id": str(entity.get("id", "")),
+                "provider": "razorpay",
+            },
+        )
+
+    return JSONResponse(status_code=200, content={"status": "ok"})
 
 
 @app.get("/auth/status")

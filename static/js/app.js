@@ -1323,23 +1323,20 @@ function closePricingModal() {
 function handleGetAccess() {
     if (!window.currentUser) {
         openAuthModal();
-    } else {
-        openPricingModal();
+        return;
     }
+    openPricingModal();
 }
 
 function canUserScan() {
-    // Refresh auth status first
     if (!isAuthenticated) {
-        return true; // Anonymous users get 1 free scan
+        return true;
     }
 
-    // Check if user is pro
     if (window.userIsPro) {
         return true;
     }
 
-    // Check if user has used their free scans
     if (userScansUsed >= 1) {
         showPaywall();
         return false;
@@ -1355,78 +1352,54 @@ function showPaywall() {
     }
 }
 
-async function activatePro(paymentId) {
+async function startPayment() {
     try {
-        const res = await fetch("/activate-pro", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-                payment_id: paymentId,
-            }),
-        });
+        const response = await fetch("/create-order", { method: "POST" });
+        const data = await response.json().catch(() => ({}));
 
-        const data = await res.json();
-
-        if (data.success) {
-            window.userIsPro = true;
-            trackEvent("pro_activated", { payment_id: paymentId });
-            showError("✅ Pro activated! Reload to continue.");
-            setTimeout(() => {
-                location.reload();
-            }, 1500);
-        } else {
-            showError("Activation failed: " + (data.detail || "Unknown error"));
+        if (!response.ok || !data.success) {
+            showError(data.detail || "Payment system not configured. Please try again later.");
+            return;
         }
+
+        if (typeof Razorpay === "undefined") {
+            showError("Payment system not available. Please try again.");
+            return;
+        }
+
+        const options = {
+            key: data.key,
+            amount: data.amount,
+            currency: data.currency || "INR",
+            order_id: data.order_id,
+            name: "InboxGuard",
+            description: `${data.display_price || "$12"} / month`,
+            prefill: {
+                email: currentUserEmail || "",
+                name: currentUserName || "",
+            },
+            handler: function () {
+                closePricingModal();
+                showError("Payment received. Unlocking access...");
+                setTimeout(() => {
+                    window.location.reload();
+                }, 5000);
+            },
+        };
+
+        const rzp = new Razorpay(options);
+        rzp.open();
     } catch (error) {
-        showError("Error activating pro: " + (error.message || "Network error"));
+        showError("Could not start checkout: " + (error && error.message ? error.message : "Unknown error"));
     }
 }
 
-function startPayment() {
-    // Fetch Razorpay key from server
-    fetch("/config")
-        .then(res => res.json())
-        .then(config => {
-            const razorpayKey = config.razorpay_key;
-            if (!razorpayKey) {
-                showError("Payment system not configured. Please try again later.");
-                return;
-            }
-
-            const options = {
-                key: razorpayKey,
-                amount: 99900, // ₹999 in paise
-                currency: "INR",
-                name: "InboxGuard",
-                description: "Pro Plan - Unlimited Scans",
-                handler: async function (response) {
-                    await activatePro(response.razorpay_payment_id);
-                },
-                prefill: {
-                    email: currentUserEmail || "",
-                    name: currentUserName || "",
-                },
-            };
-
-            if (typeof Razorpay !== "undefined") {
-                const rzp = new Razorpay(options);
-                rzp.open();
-            } else {
-                showError("Payment system not available. Please try again.");
-            }
-        })
-        .catch(err => {
-            showError("Could not load payment configuration: " + err.message);
-        });
-}
-
-// Wire up the pay button
-if (document.getElementById("pay-btn")) {
-    document.getElementById("pay-btn").onclick = function () {
+const payButton = document.getElementById("pay-btn");
+if (payButton) {
+    payButton.addEventListener("click", (event) => {
+        event.preventDefault();
         startPayment();
-    };
+    });
 }
 
 if (dashboardTab) {
