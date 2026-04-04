@@ -194,41 +194,6 @@ function showError(message) {
     setTimeout(() => errorBanner.classList.add("hidden"), 3800);
 }
 
-async function ensureResponseOk(response, fallbackMessage) {
-    if (response && response.ok) {
-        return;
-    }
-
-    let detail = "";
-    try {
-        const data = await response.json();
-        detail = String(data && (data.detail || data.error || data.message) ? (data.detail || data.error || data.message) : "");
-    } catch {
-        detail = "";
-    }
-
-    if (detail === "AUTH_REQUIRED") {
-        showAuthModal();
-        throw new Error("Sign in required for this feature.");
-    }
-    if (detail === "SUBSCRIPTION_REQUIRED") {
-        openPricingModal();
-        throw new Error("Upgrade required for this feature.");
-    }
-
-    throw new Error(detail || fallbackMessage || "Request failed.");
-}
-
-function setListStatus(node, message) {
-    if (!node) {
-        return;
-    }
-    node.innerHTML = "";
-    const li = document.createElement("li");
-    li.textContent = String(message || "Working...");
-    node.appendChild(li);
-}
-
 function trackEvent(eventName, params) {
     if (typeof window.gtag !== "function") {
         return;
@@ -1405,9 +1370,10 @@ async function runSeedSync() {
     payload.set("campaign_name", campaign || "Instant Seed Run");
     payload.set("subject_token", subjectToken);
     payload.set("body_text", String(rawEmailInput && rawEmailInput.value ? rawEmailInput.value : "InboxGuard seed probe"));
-    setListStatus(seedTestListNode, "Running instant seed probe...");
     const response = await fetch("/seed-run", { method: "POST", body: payload });
-    await ensureResponseOk(response, "Could not run instant seed probe.");
+    if (!response.ok) {
+        throw new Error("Could not run instant seed probe.");
+    }
     const data = await response.json();
     const results = data.results && typeof data.results === "object" ? data.results : {};
     const entries = Object.entries(results);
@@ -1477,9 +1443,10 @@ async function runBulkScan() {
     const payload = new FormData();
     payload.set("file", bulkFileInput.files[0]);
     payload.set("analysis_mode", analysisModeInput ? analysisModeInput.value : "content");
-    setListStatus(bulkResultsNode, "Running bulk scan...");
     const response = await fetch("/bulk-analyze", { method: "POST", body: payload });
-    await ensureResponseOk(response, "Bulk scan failed. Sign in and verify CSV format.");
+    if (!response.ok) {
+        throw new Error("Bulk scan failed. Sign in and verify CSV format.");
+    }
     const data = await response.json();
     if (!bulkResultsNode) {
         return;
@@ -1498,11 +1465,12 @@ async function runBulkScan() {
 }
 
 async function createApiKey() {
-    setListStatus(opsOutputNode, "Creating API key...");
     const payload = new FormData();
     payload.set("name", apiKeyNameInput ? String(apiKeyNameInput.value || "Primary key") : "Primary key");
     const response = await fetch("/api-keys", { method: "POST", body: payload });
-    await ensureResponseOk(response, "Could not create API key. Sign in first.");
+    if (!response.ok) {
+        throw new Error("Could not create API key. Sign in first.");
+    }
     const data = await response.json();
     if (opsOutputNode) {
         opsOutputNode.innerHTML = "";
@@ -1513,9 +1481,10 @@ async function createApiKey() {
 }
 
 async function listApiKeys() {
-    setListStatus(apiKeyListNode, "Loading API keys...");
     const response = await fetch("/api-keys", { method: "GET" });
-    await ensureResponseOk(response, "Could not load API keys. Sign in first.");
+    if (!response.ok) {
+        throw new Error("Could not load API keys. Sign in first.");
+    }
     const data = await response.json();
     const items = Array.isArray(data.items) ? data.items : [];
     if (!apiKeyListNode) {
@@ -1549,17 +1518,20 @@ async function revokeApiKey() {
     const payload = new FormData();
     payload.set("key_id", String(keyId));
     const response = await fetch("/api-keys/revoke", { method: "POST", body: payload });
-    await ensureResponseOk(response, "Could not revoke API key.");
+    if (!response.ok) {
+        throw new Error("Could not revoke API key.");
+    }
     showError(`API key #${keyId} revoked.`);
     await listApiKeys();
 }
 
 async function createTeam() {
-    setListStatus(opsOutputNode, "Creating team...");
     const payload = new FormData();
     payload.set("name", teamNameInput ? String(teamNameInput.value || "My Team") : "My Team");
     const response = await fetch("/teams", { method: "POST", body: payload });
-    await ensureResponseOk(response, "Could not create team. Sign in first.");
+    if (!response.ok) {
+        throw new Error("Could not create team. Sign in first.");
+    }
     const data = await response.json();
     if (opsOutputNode) {
         const li = document.createElement("li");
@@ -1569,9 +1541,10 @@ async function createTeam() {
 }
 
 async function listTeams() {
-    setListStatus(teamListNode, "Loading teams...");
     const response = await fetch("/teams", { method: "GET" });
-    await ensureResponseOk(response, "Could not load teams. Sign in first.");
+    if (!response.ok) {
+        throw new Error("Could not load teams. Sign in first.");
+    }
     const data = await response.json();
     const items = Array.isArray(data.items) ? data.items : [];
     if (!teamListNode) {
@@ -1607,15 +1580,19 @@ async function addTeamMember() {
     payload.set("email", email);
     payload.set("role", role);
     const response = await fetch("/teams/member", { method: "POST", body: payload });
-    await ensureResponseOk(response, "Could not add team member.");
+    if (!response.ok) {
+        const errorBody = await response.json().catch(() => ({}));
+        throw new Error(String(errorBody.detail || "Could not add team member."));
+    }
     showError(`Added ${email} to team #${teamId} as ${role}.`);
     await listTeams();
 }
 
 async function refreshOutcomeStats() {
-    setListStatus(outcomeStatsListNode, "Loading outcome stats...");
     const response = await fetch("/outcome-stats", { method: "GET" });
-    await ensureResponseOk(response, "Could not load outcome stats. Sign in first.");
+    if (!response.ok) {
+        throw new Error("Could not load outcome stats. Sign in first.");
+    }
     const data = await response.json();
     if (!outcomeStatsListNode) {
         return;
@@ -1633,9 +1610,10 @@ async function refreshOutcomeStats() {
 }
 
 async function refreshJobs() {
-    setListStatus(jobListNode, "Loading async jobs...");
     const response = await fetch("/jobs?limit=12", { method: "GET" });
-    await ensureResponseOk(response, "Could not load async jobs.");
+    if (!response.ok) {
+        throw new Error("Could not load async jobs.");
+    }
     const data = await response.json();
     const items = Array.isArray(data.items) ? data.items : [];
     if (!jobListNode) {
@@ -2222,7 +2200,10 @@ async function runCampaignDiagnosis() {
         method: "POST",
         body: payload,
     });
-    await ensureResponseOk(response, "Could not diagnose campaign.");
+
+    if (!response.ok) {
+        throw new Error("Could not diagnose campaign.");
+    }
 
     const data = await response.json();
     trackEvent("campaign_diagnosed", {
@@ -2263,11 +2244,10 @@ async function runBlacklistCheck() {
     }
     const payload = new FormData();
     payload.set("domain", domain);
-    if (blacklistResultNode) {
-        blacklistResultNode.textContent = "Checking domain risk...";
-    }
     const response = await fetch("/blacklist-check", { method: "POST", body: payload });
-    await ensureResponseOk(response, "Could not run blacklist check.");
+    if (!response.ok) {
+        throw new Error("Could not run blacklist check.");
+    }
     const data = await response.json();
     if (blacklistResultNode) {
         blacklistResultNode.textContent = data.listed
@@ -2317,9 +2297,10 @@ async function saveSeedTest() {
     payload.set("spam_count", String(spamCount));
     payload.set("notes", "Logged from dashboard");
 
-    setListStatus(seedTestListNode, "Saving seed result...");
     const response = await fetch("/seed-tests", { method: "POST", body: payload });
-    await ensureResponseOk(response, "Could not save seed test.");
+    if (!response.ok) {
+        throw new Error("Could not save seed test.");
+    }
     showError("Seed test saved.");
     await refreshSeedTests();
 }
@@ -2650,15 +2631,9 @@ if (cancelSubscriptionButton) {
 }
 
 if (dashboardTab) {
-    const toolNavButtons = Array.from(document.querySelectorAll(".tool-nav-btn"));
-    toolNavButtons.forEach((button) => {
-        button.addEventListener("click", () => {
-            const key = String(button.getAttribute("data-tool") || "");
-            const opened = button.classList.contains("active");
-            if (opened) {
-                refreshToolPaneData(key);
-            }
-        });
+    window.addEventListener("ig:tool-open", (event) => {
+        const key = String(event && event.detail && event.detail.key ? event.detail.key : "");
+        refreshToolPaneData(key);
     });
 
     if (threatScanTab) {

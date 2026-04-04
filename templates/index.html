@@ -432,7 +432,7 @@ I noticed your recent post and had one short idea to improve reply rates."></tex
           </section>
         </section>
 
-        <section class="card tool-pane" id="campaign-debugger" data-tool-pane="campaign" style="margin-top: 12px;">
+        <section class="card tool-pane" id="campaign-debugger" data-tool-pane="campaign" data-tool-title="Campaign Debugger" style="margin-top: 12px;">
           <h3>Campaign Failure Debugger</h3>
           <p class="micro">Sent a campaign already? Enter outcomes to diagnose whether failure is deliverability, copy, or targeting.</p>
           <div class="inline-fields" style="margin-top: 10px;">
@@ -465,7 +465,7 @@ I noticed your recent post and had one short idea to improve reply rates."></tex
           </div>
         </section>
 
-        <section class="card tool-pane" id="blacklist-checker" data-tool-pane="blacklist" style="margin-top: 12px;">
+        <section class="card tool-pane" id="blacklist-checker" data-tool-pane="blacklist" data-tool-title="Domain Check" style="margin-top: 12px;">
           <h3>Domain Blacklist Checker</h3>
           <p class="micro">Quickly check if your sender domain appears in a known risky list.</p>
           <div class="inline-fields" style="margin-top: 8px;">
@@ -478,7 +478,7 @@ I noticed your recent post and had one short idea to improve reply rates."></tex
           <p id="blacklist-result" class="micro" style="margin-top: 8px;">No check yet.</p>
         </section>
 
-        <section class="card tool-pane" id="seed-inbox-tracker" data-tool-pane="seed" style="margin-top: 12px;">
+        <section class="card tool-pane" id="seed-inbox-tracker" data-tool-pane="seed" data-tool-title="Seed Testing" style="margin-top: 12px;">
           <h3>Seed Inbox Testing</h3>
           <p class="micro">Log seed account outcomes per provider to catch placement drift before full rollout.</p>
           <div class="inline-fields" style="margin-top: 8px;">
@@ -513,7 +513,7 @@ I noticed your recent post and had one short idea to improve reply rates."></tex
           </ul>
         </section>
 
-        <section class="card tool-pane" id="bulk-scan" data-tool-pane="bulk" style="margin-top: 12px;">
+        <section class="card tool-pane" id="bulk-scan" data-tool-pane="bulk" data-tool-title="Bulk Scan" style="margin-top: 12px;">
           <h3>Bulk Scan (CSV)</h3>
           <p class="micro">Upload up to 100 rows with columns: raw_email OR (subject/body), plus optional domain.</p>
           <input id="bulk-file" type="file" accept=".csv,text/csv" />
@@ -523,7 +523,7 @@ I noticed your recent post and had one short idea to improve reply rates."></tex
           </ul>
         </section>
 
-        <section class="card tool-pane" id="ops-api-team" data-tool-pane="ops" style="margin-top: 12px;">
+        <section class="card tool-pane" id="ops-api-team" data-tool-pane="ops" data-tool-title="API + Team" style="margin-top: 12px;">
           <h3>API + Team Ops</h3>
           <p class="micro">Create API keys, add teams, and collaborate with role-based access.</p>
           <div class="inline-fields" style="margin-top: 8px;">
@@ -582,7 +582,7 @@ I noticed your recent post and had one short idea to improve reply rates."></tex
           </ul>
         </section>
 
-        <section class="card tool-pane" id="operator-insights" data-tool-pane="insights" style="margin-top: 12px;">
+        <section class="card tool-pane" id="operator-insights" data-tool-pane="insights" data-tool-title="Operator Insights" style="margin-top: 12px;">
           <h3>Operator Insights</h3>
           <p class="micro">Monitor feedback outcomes and async queue status from the dashboard.</p>
           <div class="actions" style="margin-top: 10px;">
@@ -660,68 +660,83 @@ I noticed your recent post and had one short idea to improve reply rates."></tex
 
     <script>
       (function () {
-        const buttons = Array.from(document.querySelectorAll('.tool-nav-btn'));
+        const buttons = Array.from(document.querySelectorAll('[data-tool]'));
         const panes = Array.from(document.querySelectorAll('.tool-pane'));
         const backdrop = document.getElementById('toolWorkspaceBackdrop');
 
-        function closePanes() {
+        function closeTool() {
           panes.forEach((pane) => pane.classList.remove('active'));
           buttons.forEach((btn) => btn.classList.remove('active'));
           if (backdrop) backdrop.classList.add('hidden');
           document.body.style.overflow = '';
         }
 
-        function openPane(key) {
-          closePanes();
-          const pane = panes.find((item) => item.getAttribute('data-tool-pane') === key);
-          const btn = buttons.find((item) => item.getAttribute('data-tool') === key);
-          if (!pane || !btn) return;
-          pane.classList.add('active');
-          btn.classList.add('active');
-          if (backdrop) backdrop.classList.remove('hidden');
-          document.body.style.overflow = 'hidden';
-          const firstInput = pane.querySelector('input,select,textarea,button');
-          if (firstInput && typeof firstInput.focus === 'function') {
-            setTimeout(() => firstInput.focus(), 60);
+        function openTool(key) {
+          closeTool();
+          const panel = document.querySelector('[data-tool-pane="' + key + '"]');
+          const trigger = document.querySelector('[data-tool="' + key + '"]');
+          if (!panel || !trigger) {
+            console.error('Missing panel for:', key);
+            return;
           }
+
+          panel.classList.add('active');
+          trigger.classList.add('active');
+          if (backdrop) backdrop.classList.add('hidden');
+
+          const firstInput = panel.querySelector('input,select,textarea,button');
+          if (firstInput && typeof firstInput.focus === 'function') {
+            setTimeout(() => firstInput.focus(), 70);
+          }
+          window.dispatchEvent(new CustomEvent('ig:tool-open', { detail: { key } }));
         }
 
-        buttons.forEach((button) => {
-          button.addEventListener('click', () => {
-            const key = button.getAttribute('data-tool') || '';
-            const open = button.classList.contains('active');
-            if (open) {
-              closePanes();
-            } else {
-              openPane(key);
+        buttons.forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const key = btn.getAttribute('data-tool');
+            const isOpen = btn.classList.contains('active');
+            if (isOpen) {
+              closeTool();
+              return;
             }
+            openTool(key || '');
           });
         });
 
         panes.forEach((pane) => {
-          if (pane.querySelector('.tool-pane-close')) return;
-          const close = document.createElement('button');
-          close.type = 'button';
-          close.className = 'tool-pane-close';
-          close.textContent = 'Close';
-          close.addEventListener('click', closePanes);
-          pane.insertBefore(close, pane.firstChild);
-        });
+          if (!pane.querySelector('.tool-pane-header')) {
+            const header = document.createElement('div');
+            header.className = 'tool-pane-header';
+            const title = document.createElement('h2');
+            title.className = 'tool-pane-title';
+            title.textContent = pane.getAttribute('data-tool-title') || 'Tool Workspace';
+            const close = document.createElement('button');
+            close.type = 'button';
+            close.className = 'tool-pane-close';
+            close.textContent = 'Close';
+            close.addEventListener('click', closeTool);
+            header.appendChild(title);
+            header.appendChild(close);
+            pane.insertBefore(header, pane.firstChild);
+          }
 
-        if (backdrop) {
-          backdrop.addEventListener('click', closePanes);
-        }
-
-        document.addEventListener('keydown', (event) => {
-          if (event.key === 'Escape') {
-            closePanes();
+          const primaryAction = pane.querySelector('button:not(.tool-pane-close)');
+          if (primaryAction) {
+            primaryAction.classList.add('tool-primary-action');
           }
         });
 
-        window.igOpenToolPane = openPane;
+        document.addEventListener('keydown', (event) => {
+          if (event.key === 'Escape') {
+            closeTool();
+          }
+        });
+
+        window.closeTool = closeTool;
+        window.igOpenToolPane = openTool;
       })();
     </script>
 
-    <script src="/static/js/app.js?v=20260404-micro5"></script>
+    <script src="/static/js/app.js?v=20260404-micro4"></script>
   </body>
 </html>
