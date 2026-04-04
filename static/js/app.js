@@ -10,10 +10,78 @@ window.fetch = (input, init = {}) => {
     return nativeFetch(input, options);
 };
 
+// ============================================================================
+// CRITICAL BUTTON HANDLERS (PREVIOUSLY DEAD)
+// ============================================================================
+
+async function handleUnlock() {
+  try {
+    const res = await fetch("/auth/status", { credentials: "include" });
+    if (!res.ok) throw new Error("Not authenticated");
+    
+    const status = await res.json();
+    
+    if (status.authenticated) {
+      // User is logged in - upgrade them
+      const upgradeRes = await fetch("/upgrade-test", {
+        method: "POST",
+        credentials: "include"
+      });
+      
+      if (upgradeRes.ok) {
+        alert("✅ Upgraded to Pro! You now have 500 credits.");
+        location.reload();
+      } else {
+        alert("Failed to upgrade. Please try again.");
+      }
+    } else {
+      // Not logged in - open auth modal
+      if (authModal) {
+        authModal.classList.remove("hidden");
+      }
+    }
+  } catch (error) {
+    console.error("Unlock error:", error);
+    alert("Error processing your request. Please try again.");
+  }
+}
+
+async function handleRequestAccess() {
+  try {
+    const res = await fetch("/auth/status", { credentials: "include" });
+    const status = await res.json();
+    
+    let email = status.authenticated ? status.email : "";
+    
+    if (!email) {
+      email = prompt("Enter your email to request access:");
+      if (!email || !email.includes("@")) {
+        alert("Please enter a valid email.");
+        return;
+      }
+    }
+    
+    const accessRes = await fetch("/request-access", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ email })
+    });
+    
+    if (accessRes.ok) {
+      alert("✅ Access requested! We'll reach out to " + email + " soon.");
+    } else {
+      alert("Error submitting request. Please try again.");
+    }
+  } catch (error) {
+    console.error("Access request error:", error);
+    alert("Error processing your request. Please try again.");
+  }
+}
+
 const resultSection = document.getElementById("result");
 const idleNote = document.getElementById("idle-note");
 const scanPanel = document.querySelector(".scan-panel");
-const featureGridPanel = document.getElementById("feature-grid-panel");
 const tabFeedbackNode = document.getElementById("tab-feedback");
 const dashboardTab = document.getElementById("tab-dashboard");
 const threatScanTab = document.getElementById("tab-threat-scan");
@@ -163,21 +231,6 @@ const refreshPlansButton = document.getElementById("refresh-plans");
 const plansOutputNode = document.getElementById("plans-output");
 const requestAccessButton = document.getElementById("request-access");
 const accessRequestEmailInput = document.getElementById("access-request-email");
-const fillExampleButton = document.getElementById("fill-example");
-
-const EXAMPLE_EMAIL = `Subject: Quick question about your onboarding flow
-
-Hi Sarah,
-
-I noticed your team recently expanded customer onboarding.
-We helped a similar SaaS company raise activation rate by 18% with one simple email sequence change.
-
-If helpful, I can send the exact sequence and benchmark notes.
-
-Open to a quick look this week?
-
-Best,
-Alex`;
 
 const loadSteps = [
     "Checking content signals...",
@@ -970,9 +1023,6 @@ function activateTab(tab) {
 
     if (tab === "threat-scan") {
         threatScanTab.classList.add("active");
-        if (featureGridPanel) {
-            featureGridPanel.classList.add("hidden");
-        }
         if (scanPanel) {
             scanPanel.classList.add("focused");
             scanPanel.classList.remove("hidden");
@@ -984,9 +1034,6 @@ function activateTab(tab) {
         setTabFeedback("Scan mode active. Paste your email and click Check Before Sending.");
     } else {
         dashboardTab.classList.add("active");
-        if (featureGridPanel) {
-            featureGridPanel.classList.remove("hidden");
-        }
         if (scanPanel) {
             scanPanel.classList.remove("focused");
             scanPanel.classList.add("hidden");
@@ -2942,404 +2989,386 @@ async function startPayment() {
         }
     }
 
-}
-
-const payButton = document.getElementById("pay-btn");
-const cancelSubscriptionButton = document.getElementById("cancel-subscription");
-if (payButton) {
-    payButton.addEventListener("click", (event) => {
-        event.preventDefault();
-        startPayment();
-    });
-}
-if (refreshPlansButton) {
-    refreshPlansButton.addEventListener("click", (event) => {
-        event.preventDefault();
-        refreshPlans().catch((error) => {
-            showError(error && error.message ? error.message : "Could not load plans.");
+    const payButton = document.getElementById("pay-btn");
+    const cancelSubscriptionButton = document.getElementById("cancel-subscription");
+    if (payButton) {
+        payButton.addEventListener("click", (event) => {
+            event.preventDefault();
+            startPayment();
         });
-    });
-}
-if (requestAccessButton) {
-    requestAccessButton.addEventListener("click", (event) => {
-        event.preventDefault();
-        requestAccess().catch((error) => {
-            showError(error && error.message ? error.message : "Could not submit access request.");
+    }
+    if (refreshPlansButton) {
+        refreshPlansButton.addEventListener("click", (event) => {
+            event.preventDefault();
+            refreshPlans().catch((error) => {
+                showError(error && error.message ? error.message : "Could not load plans.");
+            });
         });
-    });
-}
-if (cancelSubscriptionButton) {
-    cancelSubscriptionButton.addEventListener("click", async (event) => {
-        event.preventDefault();
-        const response = await fetch("/cancel-subscription", { method: "POST" });
-        if (!response.ok) {
-            showError("Could not cancel subscription.");
-            return;
-        }
-        showError("Subscription cancelled. Access will remain until current period ends.");
-        setTimeout(() => window.location.reload(), 1200);
-    });
-}
+    }
+    if (requestAccessButton) {
+        requestAccessButton.addEventListener("click", (event) => {
+            event.preventDefault();
+            requestAccess().catch((error) => {
+                showError(error && error.message ? error.message : "Could not submit access request.");
+            });
+        });
+    }
+    if (cancelSubscriptionButton) {
+        cancelSubscriptionButton.addEventListener("click", async (event) => {
+            event.preventDefault();
+            const response = await fetch("/cancel-subscription", { method: "POST" });
+            if (!response.ok) {
+                showError("Could not cancel subscription.");
+                return;
+            }
+            showError("Subscription cancelled. Access will remain until current period ends.");
+            setTimeout(() => window.location.reload(), 1200);
+        });
+    }
 
-if (dashboardTab) {
-    window.igOnToolPaneOpened = (key, pane) => {
-        refreshToolPaneData(key);
-        const primary = pane && pane.querySelector
-            ? pane.querySelector(".tool-pane-primary")
-            : null;
-        if (primary && typeof primary.focus === "function") {
-            setTimeout(() => primary.focus(), 30);
-        }
-    };
+    if (dashboardTab) {
+        window.igOnToolPaneOpened = (key, pane) => {
+            refreshToolPaneData(key);
+            const primary = pane && pane.querySelector
+                ? pane.querySelector(".tool-pane-primary")
+                : null;
+            if (primary && typeof primary.focus === "function") {
+                setTimeout(() => primary.focus(), 30);
+            }
+        };
 
-    dashboardTab.addEventListener("click", () => {
-        if (typeof window.closeTool === "function") {
-            window.closeTool();
-        }
-        activateTab("dashboard");
-    });
-
-    if (threatScanTab) {
-        threatScanTab.addEventListener("click", () => {
+        dashboardTab.addEventListener("click", () => {
             if (typeof window.closeTool === "function") {
                 window.closeTool();
             }
-            activateTab("threat-scan");
+            activateTab("dashboard");
         });
-    }
-    if (startButton) {
-        startButton.addEventListener("click", () => {
-            if (rawEmailInput) {
-                rawEmailInput.scrollIntoView({ behavior: "smooth", block: "center" });
-                setTimeout(() => rawEmailInput.focus(), 160);
-            }
-            activateTab("threat-scan");
-            trackEvent("start_clicked", { destination: "email_input" });
-        });
-    }
-    if (fillExampleButton) {
-        fillExampleButton.addEventListener("click", () => {
-            if (rawEmailInput) {
-                rawEmailInput.value = EXAMPLE_EMAIL;
-                rawEmailInput.focus();
-                rawEmailInput.setSelectionRange(rawEmailInput.value.length, rawEmailInput.value.length);
-            }
-            if (domainInput && !domainInput.value.trim()) {
-                domainInput.value = "example.com";
-            }
-            if (analysisModeInput) {
-                analysisModeInput.value = "content";
-            }
-            trackEvent("example_prefill_used", { source: "homepage_scan" });
-        });
-    }
-    if (accessButton) {
-        accessButton.addEventListener("click", (event) => {
-            event.preventDefault();
-            handleGetAccess();
-        });
-    }
-    if (fixNowButton) {
-        fixNowButton.addEventListener("click", () => {
-            const payload = new FormData();
-            payload.set("event", "rewrite_clicked");
-            fetch("/track", { method: "POST", body: payload }).catch(() => null);
 
-            pendingAction = "fix";
-            runPendingAction();
-        });
-    }
-    if (riskFixNowButton) {
-        riskFixNowButton.addEventListener("click", () => {
-            trackEvent("fix_clicked", { source: "risk_fix_now" });
-            pendingAction = "fix";
-            runPendingAction();
-        });
-    }
-    if (riskFixAsyncButton) {
-        riskFixAsyncButton.addEventListener("click", () => {
-            trackEvent("fix_async_clicked", { source: "risk_fix_async" });
-            runRewriteAsync().catch((error) => {
-                showError(error && error.message ? error.message : "Could not queue async rewrite.");
+        if (threatScanTab) {
+            threatScanTab.addEventListener("click", () => {
+                if (typeof window.closeTool === "function") {
+                    window.closeTool();
+                }
+                activateTab("threat-scan");
             });
-        });
-    }
-    if (postFixAccessButton) {
-        postFixAccessButton.addEventListener("click", () => {
-            if (!isAuthenticated) {
-                openPricingModal();
-                trackEvent("post_fix_access_clicked", { state: "anon" });
-                return;
-            }
-            trackEvent("post_fix_access_clicked", { state: "authenticated" });
-            runSeedAuto().catch(() => {
-                window.location.href = "/seed-inbox";
+        }
+        if (startButton) {
+            startButton.addEventListener("click", () => {
+                if (rawEmailInput) {
+                    rawEmailInput.scrollIntoView({ behavior: "smooth", block: "center" });
+                    setTimeout(() => rawEmailInput.focus(), 160);
+                }
+                activateTab("threat-scan");
+                trackEvent("start_clicked", { destination: "email_input" });
             });
-        });
-    }
-    if (useFixedButton) {
-        useFixedButton.addEventListener("click", useFixedVersion);
-    }
-    if (sendGmailButton) {
-        sendGmailButton.addEventListener("click", openInGmail);
-    }
-    if (restoreOriginalButton) {
-        restoreOriginalButton.addEventListener("click", restoreOriginalDraft);
-    }
-    if (editManualButton) {
-        editManualButton.addEventListener("click", editManually);
-    }
-    if (feedbackInboxButton) {
-        feedbackInboxButton.addEventListener("click", () => sendFeedback("inbox"));
-    }
-    if (feedbackSpamButton) {
-        feedbackSpamButton.addEventListener("click", () => sendFeedback("spam"));
-    }
-    if (feedbackPromotionsButton) {
-        feedbackPromotionsButton.addEventListener("click", () => sendFeedback("promotions"));
-    }
-    if (saveFixButton) {
-        saveFixButton.addEventListener("click", () => {
-            pendingAction = "save-fix";
-            saveCurrentFix().catch((error) => {
-                showError(error && error.message ? error.message : "Could not save this fix.");
+        }
+        if (accessButton) {
+            accessButton.addEventListener("click", (event) => {
+                event.preventDefault();
+                handleGetAccess();
             });
-        });
-    }
-    if (runDiagnosisButton) {
-        runDiagnosisButton.addEventListener("click", () => {
-            runCampaignDiagnosis().catch((error) => {
-                showError(error && error.message ? error.message : "Could not diagnose campaign.");
+        }
+        if (fixNowButton) {
+            fixNowButton.addEventListener("click", () => {
+                const payload = new FormData();
+                payload.set("event", "rewrite_clicked");
+                fetch("/track", { method: "POST", body: payload }).catch(() => null);
+
+                pendingAction = "fix";
+                runPendingAction();
             });
-        });
-    }
-    if (submitAsyncButton) {
-        submitAsyncButton.addEventListener("click", () => {
-            runAnalyzeAsync().catch((error) => {
-                showError(error && error.message ? error.message : "Could not queue async scan.");
+        }
+        if (riskFixNowButton) {
+            riskFixNowButton.addEventListener("click", () => {
+                trackEvent("fix_clicked", { source: "risk_fix_now" });
+                pendingAction = "fix";
+                runPendingAction();
             });
-        });
-    }
-    if (runBlacklistCheckButton) {
-        runBlacklistCheckButton.addEventListener("click", () => {
-            runBlacklistCheck().catch((error) => {
-                showError(error && error.message ? error.message : "Could not check domain risk.");
+        }
+        if (riskFixAsyncButton) {
+            riskFixAsyncButton.addEventListener("click", () => {
+                trackEvent("fix_async_clicked", { source: "risk_fix_async" });
+                runRewriteAsync().catch((error) => {
+                    showError(error && error.message ? error.message : "Could not queue async rewrite.");
+                });
             });
-        });
-    }
-    if (saveSeedTestButton) {
-        saveSeedTestButton.addEventListener("click", () => {
-            saveSeedTest().catch((error) => {
-                showError(error && error.message ? error.message : "Could not save seed test.");
+        }
+        if (postFixAccessButton) {
+            postFixAccessButton.addEventListener("click", () => {
+                if (!isAuthenticated) {
+                    openPricingModal();
+                    trackEvent("post_fix_access_clicked", { state: "anon" });
+                    return;
+                }
+                trackEvent("post_fix_access_clicked", { state: "authenticated" });
+                runSeedAuto().catch(() => {
+                    window.location.href = "/seed-inbox";
+                });
             });
-        });
-    }
-    if (runSeedAutoButton) {
-        runSeedAutoButton.addEventListener("click", () => {
-            runSeedAuto().catch((error) => {
-                showError(error && error.message ? error.message : "Could not run automated seed test.");
+        }
+        if (useFixedButton) {
+            useFixedButton.addEventListener("click", useFixedVersion);
+        }
+        if (sendGmailButton) {
+            sendGmailButton.addEventListener("click", openInGmail);
+        }
+        if (restoreOriginalButton) {
+            restoreOriginalButton.addEventListener("click", restoreOriginalDraft);
+        }
+        if (editManualButton) {
+            editManualButton.addEventListener("click", editManually);
+        }
+        if (feedbackInboxButton) {
+            feedbackInboxButton.addEventListener("click", () => sendFeedback("inbox"));
+        }
+        if (feedbackSpamButton) {
+            feedbackSpamButton.addEventListener("click", () => sendFeedback("spam"));
+        }
+        if (feedbackPromotionsButton) {
+            feedbackPromotionsButton.addEventListener("click", () => sendFeedback("promotions"));
+        }
+        if (saveFixButton) {
+            saveFixButton.addEventListener("click", () => {
+                pendingAction = "save-fix";
+                saveCurrentFix().catch((error) => {
+                    showError(error && error.message ? error.message : "Could not save this fix.");
+                });
             });
-        });
-    }
-    if (runSeedSyncButton) {
-        runSeedSyncButton.addEventListener("click", () => {
-            runSeedSync().catch((error) => {
-                showError(error && error.message ? error.message : "Could not run instant seed probe.");
+        }
+        if (runDiagnosisButton) {
+            runDiagnosisButton.addEventListener("click", () => {
+                runCampaignDiagnosis().catch((error) => {
+                    showError(error && error.message ? error.message : "Could not diagnose campaign.");
+                });
             });
-        });
-    }
-    if (runBulkScanButton) {
-        runBulkScanButton.addEventListener("click", () => {
-            runBulkScan().catch((error) => {
-                showError(error && error.message ? error.message : "Could not run bulk scan.");
+        }
+        if (submitAsyncButton) {
+            submitAsyncButton.addEventListener("click", () => {
+                runAnalyzeAsync().catch((error) => {
+                    showError(error && error.message ? error.message : "Could not queue async scan.");
+                });
             });
-        });
-    }
-    if (createApiKeyButton) {
-        createApiKeyButton.addEventListener("click", () => {
-            createApiKey().catch((error) => {
-                showError(error && error.message ? error.message : "Could not create API key.");
+        }
+        if (runBlacklistCheckButton) {
+            runBlacklistCheckButton.addEventListener("click", () => {
+                runBlacklistCheck().catch((error) => {
+                    showError(error && error.message ? error.message : "Could not check domain risk.");
+                });
             });
-        });
-    }
-    if (listApiKeysButton) {
-        listApiKeysButton.addEventListener("click", () => {
-            listApiKeys().catch((error) => {
-                showError(error && error.message ? error.message : "Could not load API keys.");
+        }
+        if (saveSeedTestButton) {
+            saveSeedTestButton.addEventListener("click", () => {
+                saveSeedTest().catch((error) => {
+                    showError(error && error.message ? error.message : "Could not save seed test.");
+                });
             });
-        });
-    }
-    if (revokeApiKeyButton) {
-        revokeApiKeyButton.addEventListener("click", () => {
-            revokeApiKey().catch((error) => {
-                showError(error && error.message ? error.message : "Could not revoke API key.");
+        }
+        if (runSeedAutoButton) {
+            runSeedAutoButton.addEventListener("click", () => {
+                runSeedAuto().catch((error) => {
+                    showError(error && error.message ? error.message : "Could not run automated seed test.");
+                });
             });
-        });
-    }
-    if (createTeamButton) {
-        createTeamButton.addEventListener("click", () => {
-            createTeam().catch((error) => {
-                showError(error && error.message ? error.message : "Could not create team.");
+        }
+        if (runSeedSyncButton) {
+            runSeedSyncButton.addEventListener("click", () => {
+                runSeedSync().catch((error) => {
+                    showError(error && error.message ? error.message : "Could not run instant seed probe.");
+                });
             });
-        });
-    }
-    if (listTeamsButton) {
-        listTeamsButton.addEventListener("click", () => {
-            listTeams().catch((error) => {
-                showError(error && error.message ? error.message : "Could not load teams.");
+        }
+        if (runBulkScanButton) {
+            runBulkScanButton.addEventListener("click", () => {
+                runBulkScan().catch((error) => {
+                    showError(error && error.message ? error.message : "Could not run bulk scan.");
+                });
             });
-        });
-    }
-    if (addTeamMemberButton) {
-        addTeamMemberButton.addEventListener("click", () => {
-            addTeamMember().catch((error) => {
-                showError(error && error.message ? error.message : "Could not add team member.");
+        }
+        if (createApiKeyButton) {
+            createApiKeyButton.addEventListener("click", () => {
+                createApiKey().catch((error) => {
+                    showError(error && error.message ? error.message : "Could not create API key.");
+                });
             });
-        });
-    }
-    if (refreshOutcomeStatsButton) {
-        refreshOutcomeStatsButton.addEventListener("click", () => {
-            refreshOutcomeStats().catch((error) => {
-                showError(error && error.message ? error.message : "Could not load outcome stats.");
+        }
+        if (listApiKeysButton) {
+            listApiKeysButton.addEventListener("click", () => {
+                listApiKeys().catch((error) => {
+                    showError(error && error.message ? error.message : "Could not load API keys.");
+                });
             });
-        });
-    }
-    if (refreshJobsButton) {
-        refreshJobsButton.addEventListener("click", () => {
-            refreshJobs().catch((error) => {
-                showError(error && error.message ? error.message : "Could not load async jobs.");
+        }
+        if (revokeApiKeyButton) {
+            revokeApiKeyButton.addEventListener("click", () => {
+                revokeApiKey().catch((error) => {
+                    showError(error && error.message ? error.message : "Could not revoke API key.");
+                });
             });
-        });
-    }
-    if (leadCaptureContinueButton) {
-        leadCaptureContinueButton.addEventListener("click", () => {
-            continueWithLeadCapture().catch((error) => {
-                showError(error && error.message ? error.message : "Could not save your email.");
+        }
+        if (createTeamButton) {
+            createTeamButton.addEventListener("click", () => {
+                createTeam().catch((error) => {
+                    showError(error && error.message ? error.message : "Could not create team.");
+                });
             });
-        });
-    }
-    if (leadCaptureCloseButton) {
-        leadCaptureCloseButton.addEventListener("click", () => {
-            hideLeadCaptureModal();
-        });
-    }
-    if (authSignInButton) {
-        authSignInButton.addEventListener("click", () => handleAuthAction("signin"));
-    }
-    if (authCreateButton) {
-        authCreateButton.addEventListener("click", () => handleAuthAction("create"));
-    }
-    if (authCloseButton) {
-        authCloseButton.addEventListener("click", () => handleAuthAction("close"));
-    }
-    if (authModal) {
-        authModal.addEventListener("click", (event) => {
-            const target = event.target;
-            if (!(target instanceof HTMLElement)) {
-                return;
-            }
-            if (target.id === "auth-modal") {
-                handleAuthAction("close");
-                return;
-            }
-            if (target.id === "auth-signin") {
-                handleAuthAction("signin");
-                return;
-            }
-            if (target.id === "auth-create") {
-                handleAuthAction("create");
-                return;
-            }
-            if (target.id === "auth-close") {
-                handleAuthAction("close");
-            }
-        });
-    }
-    if (leadCaptureModal) {
-        leadCaptureModal.addEventListener("click", (event) => {
-            const target = event.target;
-            if (!(target instanceof HTMLElement)) {
-                return;
-            }
-            if (target.id === "lead-capture-modal") {
-                hideLeadCaptureModal();
-                return;
-            }
-            if (target.id === "lead-capture-continue") {
+        }
+        if (listTeamsButton) {
+            listTeamsButton.addEventListener("click", () => {
+                listTeams().catch((error) => {
+                    showError(error && error.message ? error.message : "Could not load teams.");
+                });
+            });
+        }
+        if (addTeamMemberButton) {
+            addTeamMemberButton.addEventListener("click", () => {
+                addTeamMember().catch((error) => {
+                    showError(error && error.message ? error.message : "Could not add team member.");
+                });
+            });
+        }
+        if (refreshOutcomeStatsButton) {
+            refreshOutcomeStatsButton.addEventListener("click", () => {
+                refreshOutcomeStats().catch((error) => {
+                    showError(error && error.message ? error.message : "Could not load outcome stats.");
+                });
+            });
+        }
+        if (refreshJobsButton) {
+            refreshJobsButton.addEventListener("click", () => {
+                refreshJobs().catch((error) => {
+                    showError(error && error.message ? error.message : "Could not load async jobs.");
+                });
+            });
+        }
+        if (leadCaptureContinueButton) {
+            leadCaptureContinueButton.addEventListener("click", () => {
                 continueWithLeadCapture().catch((error) => {
                     showError(error && error.message ? error.message : "Could not save your email.");
                 });
-                return;
-            }
-            if (target.id === "lead-capture-close") {
+            });
+        }
+        if (leadCaptureCloseButton) {
+            leadCaptureCloseButton.addEventListener("click", () => {
                 hideLeadCaptureModal();
-            }
-        });
-    }
-
-    if (form) {
-        form.addEventListener("submit", async (event) => {
-            event.preventDefault();
-            if (!canUserScan()) {
-                return;
-            }
-            pendingAction = "analyze";
-            if (needsLeadCaptureGate("analyze")) {
-                showLeadCaptureModal();
-                return;
-            }
-            if (needsAuthGate("analyze")) {
-                if (isAuthenticated) {
-                    showError("You reached your monthly free plan scan limit. Upgrade is required for more scans.");
+            });
+        }
+        if (authSignInButton) {
+            authSignInButton.addEventListener("click", () => handleAuthAction("signin"));
+        }
+        if (authCreateButton) {
+            authCreateButton.addEventListener("click", () => handleAuthAction("create"));
+        }
+        if (authCloseButton) {
+            authCloseButton.addEventListener("click", () => handleAuthAction("close"));
+        }
+        if (authModal) {
+            authModal.addEventListener("click", (event) => {
+                const target = event.target;
+                if (!(target instanceof HTMLElement)) {
                     return;
                 }
-                showAuthModal();
-                return;
-            }
-            runPendingAction();
+                if (target.id === "auth-modal") {
+                    handleAuthAction("close");
+                    return;
+                }
+                if (target.id === "auth-signin") {
+                    handleAuthAction("signin");
+                    return;
+                }
+                if (target.id === "auth-create") {
+                    handleAuthAction("create");
+                    return;
+                }
+                if (target.id === "auth-close") {
+                    handleAuthAction("close");
+                }
+            });
+        }
+        if (leadCaptureModal) {
+            leadCaptureModal.addEventListener("click", (event) => {
+                const target = event.target;
+                if (!(target instanceof HTMLElement)) {
+                    return;
+                }
+                if (target.id === "lead-capture-modal") {
+                    hideLeadCaptureModal();
+                    return;
+                }
+                if (target.id === "lead-capture-continue") {
+                    continueWithLeadCapture().catch((error) => {
+                        showError(error && error.message ? error.message : "Could not save your email.");
+                    });
+                    return;
+                }
+                if (target.id === "lead-capture-close") {
+                    hideLeadCaptureModal();
+                }
+            });
+        }
+
+        if (form) {
+            form.addEventListener("submit", async (event) => {
+                event.preventDefault();
+                if (!canUserScan()) {
+                    return;
+                }
+                pendingAction = "analyze";
+                if (needsLeadCaptureGate("analyze")) {
+                    showLeadCaptureModal();
+                    return;
+                }
+                if (needsAuthGate("analyze")) {
+                    if (isAuthenticated) {
+                        showError("You reached your monthly free plan scan limit. Upgrade is required for more scans.");
+                        return;
+                    }
+                    showAuthModal();
+                    return;
+                }
+                runPendingAction();
+            });
+        }
+
+        if (rawEmailInput) {
+            rawEmailInput.addEventListener("input", () => {
+                const value = String(rawEmailInput.value || "").trim();
+                if (!emailPastedTracked && value.length >= 20) {
+                    emailPastedTracked = true;
+                    trackEvent("email_pasted", {
+                        length_bucket: value.length >= 300 ? "300_plus" : value.length >= 120 ? "120_299" : "20_119",
+                    });
+                }
+            });
+        }
+
+        document.querySelectorAll("details.secondary-options, details.advanced-block").forEach((detailsNode) => {
+            detailsNode.addEventListener("toggle", () => {
+                if (detailsNode.open && !advancedOpenedTracked) {
+                    advancedOpenedTracked = true;
+                    trackEvent("advanced_opened", {
+                        section: detailsNode.classList.contains("advanced-block") ? "why_flagged" : "scan_options",
+                    });
+                }
+            });
         });
     }
 
-    if (rawEmailInput) {
-        rawEmailInput.addEventListener("input", () => {
-            const value = String(rawEmailInput.value || "").trim();
-            if (!emailPastedTracked && value.length >= 20) {
-                emailPastedTracked = true;
-                trackEvent("email_pasted", {
-                    length_bucket: value.length >= 300 ? "300_plus" : value.length >= 120 ? "120_299" : "20_119",
-                });
-            }
-        });
-    }
+    magnetic(submitButton);
+    magnetic(useFixedButton);
+    initializeLoopCounters();
+    setupNextAction();
+    setupParallax();
 
-    document.querySelectorAll("details.secondary-options, details.advanced-block").forEach((detailsNode) => {
-        detailsNode.addEventListener("toggle", () => {
-            if (detailsNode.open && !advancedOpenedTracked) {
-                advancedOpenedTracked = true;
-                trackEvent("advanced_opened", {
-                    section: detailsNode.classList.contains("advanced-block") ? "why_flagged" : "scan_options",
-                });
-            }
-        });
+    setIdleState();
+    activateTab("dashboard");
+    refreshAuthStatus().then(() => {
+        resumePendingAfterAuthIfNeeded();
+        openAuthModalFromQueryIfNeeded();
+        refreshSeedTests().catch(() => null);
+        if (isAuthenticated) {
+            listApiKeys().catch(() => null);
+            listTeams().catch(() => null);
+            refreshOutcomeStats().catch(() => null);
+        }
+        refreshJobs().catch(() => null);
     });
-}
-
-magnetic(submitButton);
-magnetic(useFixedButton);
-initializeLoopCounters();
-setupNextAction();
-setupParallax();
-
-setIdleState();
-activateTab("dashboard");
-refreshAuthStatus().then(() => {
-    resumePendingAfterAuthIfNeeded();
-    openAuthModalFromQueryIfNeeded();
-    refreshSeedTests().catch(() => null);
-    if (isAuthenticated) {
-        listApiKeys().catch(() => null);
-        listTeams().catch(() => null);
-        refreshOutcomeStats().catch(() => null);
-    }
-    refreshJobs().catch(() => null);
-});

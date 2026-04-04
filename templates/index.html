@@ -106,27 +106,23 @@
               🔋 <span id="token-count">0</span> <span id="token-label">credits</span>
             </div>
             <button id="start-btn" type="button" class="start-btn">Try with your email</button>
-            <button id="access-btn" type="button" class="access-link">Unlock Safe Sending</button>
+            <button id="access-btn" type="button" class="access-link" onclick="handleUnlock()">Unlock Safe Sending</button>
           </div>
         </header>
         
-        <section class="domain-risk-alert">
-          <p class="domain-risk-title">Domain reputation at risk</p>
-          <p class="domain-risk-text">Repeated sends from risky drafts can degrade sender trust across major inbox providers.</p>
+        <!-- HOMEPAGE HERO (CLEAN & FOCUSED) -->
+        <section class="hero-section card">
+          <h2>Stop guessing. Know before you send.</h2>
+          <p>Catch deliverability risks before your email goes to spam.</p>
+          <p style="margin-top:16px; font-size:0.95rem; color:#666;">
+            Scan your draft, see risks, get safer versions — all in seconds.
+          </p>
         </section>
 
-        <section class="hero-story card">
-          <h2>This email will get filtered. Fix it before you send.</h2>
-          <p>Know if your email will land in inbox before sending across Gmail, Outlook, and other providers.</p>
-          <p class="hero-note">Last check before you hit send.</p>
-        </section>
-        <p id="tab-feedback" class="tab-feedback">Paste your email, click Check Before Sending, and get fixes instantly.</p>
-        <p id="winCounter" class="micro">Emails improved: 0</p>
-        <p id="streak" class="micro">🔥 0 improvements in a row</p>
-
-        <section id="feature-grid-panel" class="card">
+        <!-- FEATURE GRID (HOME ONLY) -->
+        <section class="scan-panel card">
           <section id="feature-grid" class="feature-grid">
-            <h2 class="feature-grid-title">Choose a tool to get started</h2>
+                    <h2 style="grid-column: 1 / -1; margin-bottom: 20px; font-size: 1.8rem;">Choose a tool to get started</h2>
           
                     <!-- Scan Email -->
                     <div class="feature-card">
@@ -141,7 +137,7 @@
                       <div class="feature-cost">2 tokens</div>
                       <h3 class="feature-title">Campaign Debugger</h3>
                       <p class="feature-description">Diagnose why your emails are failing. Analyze metrics and find the exact issue.</p>
-                      <button class="feature-open-btn" onclick="openTool('campaign-debugger');">Open Tool</button>
+                      <button class="feature-open-btn" onclick="openToolPane('campaign-debugger');">Open Tool</button>
                     </div>
 
                     <!-- Domain Check -->
@@ -149,7 +145,7 @@
                       <div class="feature-cost">1 token</div>
                       <h3 class="feature-title">Domain Check</h3>
                       <p class="feature-description">Check if your domain is blacklisted on major blocklists. Essential before campaign launch.</p>
-                      <button class="feature-open-btn" onclick="openTool('blacklist');">Open Tool</button>
+                      <button class="feature-open-btn" onclick="openToolPane('blacklist');">Open Tool</button>
                     </div>
 
                     <!-- Seed Testing -->
@@ -157,7 +153,7 @@
                       <div class="feature-cost">5 tokens</div>
                       <h3 class="feature-title">Seed Testing</h3>
                       <p class="feature-description">Send test emails to seed inboxes and track delivery across providers in real-time.</p>
-                      <button class="feature-open-btn" onclick="openTool('seed');">Open Tool</button>
+                      <button class="feature-open-btn" onclick="openToolPane('seed');">Open Tool</button>
                     </div>
 
                     <!-- Bulk Scan -->
@@ -165,7 +161,7 @@
                       <div class="feature-cost">3 tokens</div>
                       <h3 class="feature-title">Bulk Scan</h3>
                       <p class="feature-description">Upload CSV of emails and scan them all at once. Great for testing variations.</p>
-                      <button class="feature-open-btn" onclick="openTool('bulk');">Open Tool</button>
+                      <button class="feature-open-btn" onclick="openToolPane('bulk');">Open Tool</button>
                     </div>
 
                     <!-- API + Team -->
@@ -173,12 +169,12 @@
                       <div class="feature-cost">Custom</div>
                       <h3 class="feature-title">API + Team</h3>
                       <p class="feature-description">Integrate InboxGuard into your workflow. Manage teams and collaborate securely.</p>
-                      <button class="feature-open-btn" onclick="openTool('ops');">Open Tool</button>
+                      <button class="feature-open-btn" onclick="openToolPane('ops');">Open Tool</button>
                     </div>
-          </section>
-        </section>
-
-        <section class="scan-panel card hidden">
+                  </section>
+                  <!-- END FEATURE GRID -->
+        
+                  <section class="scan-panel card hidden">
           <form id="risk-form" class="scan-form">
             <label class="input-label" for="raw-email">Paste The Email You Plan To Send</label>
             <textarea id="raw-email" name="raw_email" rows="8" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Paste your email (subject + message)
@@ -188,7 +184,6 @@ Subject: Quick question
 
 Hi John,
 I noticed your recent post and had one short idea to improve reply rates."></textarea>
-            <button type="button" id="fill-example" class="example-btn">Use example email</button>
 
             <details class="secondary-options">
               <summary>Advanced options</summary>
@@ -233,7 +228,7 @@ I noticed your recent post and had one short idea to improve reply rates."></tex
         <div id="paywall" class="hidden paywall-section">
           <h3>You've found your biggest risk. Fixing one email isn't enough.</h3>
           <p>Unlock Safe Sending to run your next check before the next campaign goes out.</p>
-          <button type="button" onclick="openPricingModal()" class="btn-primary">Unlock Safe Sending</button>
+          <button type="button" onclick="handleUnlock()" class="btn-primary">Unlock Safe Sending</button>
         </div>
 
         <!-- decision-engine-v2 -->
@@ -735,8 +730,8 @@ I noticed your recent post and had one short idea to improve reply rates."></tex
                   <p id="promo-message" class="pricing-note" style="margin-top:4px; display:none;"></p>
                 </div>
         </ul>
-        <button id="pay-btn" type="button" class="primary-btn">Unlock Safe Sending</button>
-        <button id="request-access" type="button" class="secondary-btn">Request Access</button>
+        <button id="pay-btn" type="button" class="primary-btn" onclick="handleUnlock()">Unlock Safe Sending</button>
+        <button id="request-access" type="button" class="secondary-btn" onclick="handleRequestAccess()">Request Access</button>
         <button id="cancel-subscription" type="button" class="secondary-btn hidden">Cancel Subscription</button>
         <button onclick="closePricingModal()" class="secondary-btn">Cancel</button>
       </div>
