@@ -1,4 +1,4 @@
-(function commandCenter() {
+(function progressiveCommandCenter() {
     const analyzeBtn = document.getElementById("analyzeBtn");
     const emailInput = document.getElementById("emailInput");
     const analysisMode = document.getElementById("analysisMode");
@@ -8,11 +8,14 @@
         return;
     }
 
-    const stepsWrap = document.getElementById("analysisSteps");
+    const analysisPanel = document.getElementById("analysisPanel");
+    const decisionPanel = document.getElementById("decisionPanel");
+    const rewritePanel = document.getElementById("rewritePanel");
+    const featureReveal = document.getElementById("featureReveal");
+
     const steps = Array.from(document.querySelectorAll(".step"));
     const progressBar = document.getElementById("progressBar");
 
-    const decisionBlock = document.getElementById("decisionBlock");
     const decisionText = document.getElementById("decisionText");
     const decisionSub = document.getElementById("decisionSub");
     const primaryIssue = document.getElementById("primaryIssue");
@@ -20,8 +23,8 @@
 
     const beforeBox = document.getElementById("beforeBox");
     const afterBox = document.getElementById("afterBox");
-    const useRewrite = document.getElementById("useRewrite");
     const changeTags = document.getElementById("changeTags");
+    const useRewrite = document.getElementById("useRewrite");
 
     const rewardBox = document.getElementById("rewardBox");
     const rewardText = document.getElementById("rewardText");
@@ -40,6 +43,8 @@
     const nextAction = document.getElementById("nextAction");
 
     const defaultAnalyzeLabel = analyzeBtn.textContent;
+    const APP_WINS = "ig_wins";
+    const APP_STREAK = "ig_streak";
 
     let latestDecision = "";
     let latestRewriteStyle = "balanced";
@@ -48,18 +53,10 @@
     let latestFromScore = 0;
     let latestToScore = 0;
 
-    const APP_WINS = "ig_wins";
-    const APP_STREAK = "ig_streak";
-
     function spring({ from, to, stiffness = 0.08, damping = 0.8, onUpdate }) {
         let position = Number(from || 0);
         let velocity = 0;
-        let cancelled = false;
-
         function frame() {
-            if (cancelled) {
-                return;
-            }
             const force = (to - position) * stiffness;
             velocity = velocity * damping + force;
             position += velocity;
@@ -70,64 +67,20 @@
                 onUpdate(to);
             }
         }
-
         requestAnimationFrame(frame);
-        return () => {
-            cancelled = true;
-        };
-    }
-
-    function magnetic(el) {
-        if (!el) return;
-        el.addEventListener("mousemove", (e) => {
-            const rect = el.getBoundingClientRect();
-            const x = (e.clientX - rect.left - rect.width / 2) * 0.16;
-            const y = (e.clientY - rect.top - rect.height / 2) * 0.16;
-            el.style.transform = `translate(${x}px, ${y}px)`;
-        });
-        el.addEventListener("mouseleave", () => {
-            el.style.transform = "translate(0px, 0px)";
-        });
     }
 
     function animateDecision(el) {
         spring({
-            from: 0.8,
+            from: 0.82,
             to: 1,
             stiffness: 0.09,
             damping: 0.79,
             onUpdate: (scale) => {
                 el.style.transform = `scale(${scale})`;
-                el.style.opacity = String(Math.max(0.2, Math.min(1, scale)));
+                el.style.opacity = String(Math.max(0.25, Math.min(1, scale)));
             },
         });
-    }
-
-    function slideIn(el) {
-        spring({
-            from: 100,
-            to: 0,
-            stiffness: 0.06,
-            damping: 0.75,
-            onUpdate: (x) => {
-                el.style.transform = `translateX(${x}px)`;
-                el.style.opacity = String(1 - Math.min(1, x / 100));
-            },
-        });
-    }
-
-    function revealText(el, text) {
-        if (!el) return;
-        let i = 0;
-        el.textContent = "";
-        function type() {
-            if (i < text.length) {
-                el.textContent += text[i];
-                i += 1;
-                setTimeout(type, 14);
-            }
-        }
-        type();
     }
 
     function showOverlay(text) {
@@ -135,21 +88,19 @@
         overlayText.textContent = text;
         overlay.classList.remove("hidden");
         overlay.style.opacity = "0";
-
         spring({
-            from: 0.7,
+            from: 0.75,
             to: 1,
             onUpdate: (scale) => {
                 overlay.style.transform = `scale(${scale})`;
                 overlay.style.opacity = String(Math.max(0.2, Math.min(1, scale)));
             },
         });
-
         setTimeout(() => {
             overlay.classList.add("hidden");
             overlay.style.transform = "scale(1)";
             overlay.style.opacity = "1";
-        }, 1500);
+        }, 1400);
     }
 
     function updateCounters() {
@@ -160,10 +111,8 @@
     }
 
     function incrementCounters() {
-        const wins = Number(localStorage.getItem(APP_WINS) || "0") + 1;
-        const streak = Number(localStorage.getItem(APP_STREAK) || "0") + 1;
-        localStorage.setItem(APP_WINS, String(wins));
-        localStorage.setItem(APP_STREAK, String(streak));
+        localStorage.setItem(APP_WINS, String(Number(localStorage.getItem(APP_WINS) || "0") + 1));
+        localStorage.setItem(APP_STREAK, String(Number(localStorage.getItem(APP_STREAK) || "0") + 1));
         updateCounters();
     }
 
@@ -172,22 +121,32 @@
         updateCounters();
     }
 
-    function resetUI() {
-        steps.forEach((step, idx) => {
+    function lockAnalyze(locked) {
+        analyzeBtn.disabled = locked;
+        analyzeBtn.textContent = locked ? "Analyzing..." : defaultAnalyzeLabel;
+    }
+
+    function resetStepLines() {
+        const labels = [
+            "Scanning structure...",
+            "Checking spam patterns...",
+            "Analyzing tone...",
+            "Predicting inbox placement...",
+        ];
+        steps.forEach((step, index) => {
             step.classList.remove("active");
-            step.textContent = [
-                "Scanning structure...",
-                "Checking spam patterns...",
-                "Analyzing tone...",
-                "Predicting inbox placement...",
-            ][idx];
+            step.textContent = labels[index];
         });
-        stepsWrap.classList.add("hidden");
-        decisionBlock.classList.add("hidden");
-        decisionText.classList.remove("pulse-red");
-        decisionText.style.transform = "scale(1)";
-        decisionText.style.opacity = "1";
-        if (progressBar) progressBar.style.width = "0%";
+        if (progressBar) {
+            progressBar.style.width = "0%";
+        }
+    }
+
+    function resetOutput() {
+        decisionText.textContent = "";
+        decisionSub.textContent = "";
+        primaryIssue.textContent = "";
+        learningAdjustments.innerHTML = "";
 
         beforeBox.textContent = "-";
         afterBox.textContent = "-";
@@ -205,41 +164,39 @@
         latestToScore = 0;
     }
 
-    function lockAnalyze(locked) {
-        analyzeBtn.disabled = locked;
-        analyzeBtn.textContent = locked ? "Analyzing..." : defaultAnalyzeLabel;
+    function showStage(node) {
+        if (!node) return;
+        node.classList.remove("hidden");
+        node.classList.add("cc-stage-enter");
+        setTimeout(() => node.classList.remove("cc-stage-enter"), 350);
     }
 
     async function runSteps() {
-        stepsWrap.classList.remove("hidden");
-        let stopProgress = spring({
+        showStage(analysisPanel);
+        spring({
             from: 0,
             to: 100,
             stiffness: 0.05,
             damping: 0.85,
-            onUpdate: (v) => {
-                if (progressBar) progressBar.style.width = `${Math.max(0, Math.min(100, v))}%`;
+            onUpdate: (value) => {
+                if (progressBar) {
+                    progressBar.style.width = `${Math.max(0, Math.min(100, value))}%`;
+                }
             },
         });
 
         for (let i = 0; i < steps.length; i += 1) {
             steps[i].classList.add("active");
-            if (!steps[i].textContent.endsWith(" ✓")) {
-                steps[i].textContent += " ✓";
-            }
+            steps[i].textContent = `${steps[i].textContent} ✓`;
             // eslint-disable-next-line no-await-in-loop
-            await new Promise((resolve) => setTimeout(resolve, 350 + i * 100));
+            await new Promise((resolve) => setTimeout(resolve, 360 + i * 110));
         }
-        if (typeof stopProgress === "function") {
-            stopProgress();
-        }
-        if (progressBar) progressBar.style.width = "100%";
     }
 
-    async function analyzeEmail(rawEmailValue) {
+    async function analyzeEmail(rawEmail) {
         const payload = new FormData();
-        payload.set("raw_email", rawEmailValue);
-        payload.set("analysis_mode", analysisMode ? analysisMode.value : "full");
+        payload.set("raw_email", rawEmail);
+        payload.set("analysis_mode", analysisMode.value || "full");
 
         const res = await fetch("/analyze", { method: "POST", body: payload });
         if (!res.ok) {
@@ -249,11 +206,11 @@
         return res.json();
     }
 
-    async function rewriteEmail(rawEmailValue) {
-        latestRewriteStyle = rewriteStyle ? rewriteStyle.value : "balanced";
+    async function rewriteEmail(rawEmail) {
+        latestRewriteStyle = rewriteStyle.value || "balanced";
         const payload = new FormData();
-        payload.set("raw_email", rawEmailValue);
-        payload.set("analysis_mode", analysisMode ? analysisMode.value : "full");
+        payload.set("raw_email", rawEmail);
+        payload.set("analysis_mode", analysisMode.value || "full");
         payload.set("rewrite_style", latestRewriteStyle);
 
         const res = await fetch("/rewrite", { method: "POST", body: payload });
@@ -263,40 +220,36 @@
         return res.json();
     }
 
-    function renderLearning(rows) {
-        if (!Array.isArray(rows) || !rows.length) {
+    function renderLearning(items) {
+        if (!Array.isArray(items) || !items.length) {
             learningAdjustments.innerHTML = "";
             return;
         }
-        learningAdjustments.innerHTML = rows.slice(0, 3).map((row) => {
-            const impact = Number(row.impact || 0);
+        learningAdjustments.innerHTML = items.slice(0, 4).map((item) => {
+            const impact = Number(item.impact || 0);
             const sign = impact > 0 ? "+" : "";
-            return `<div>${row.pattern}: ${sign}${impact} -> ${row.reason || "learning impact"}</div>`;
+            return `<div>${item.pattern}: ${sign}${impact} -> ${item.reason || "learning signal"}</div>`;
         }).join("");
     }
 
-    function showDecision(analysis) {
-        const summary = analysis.summary || {};
-        const prediction = analysis.prediction || {};
+    function renderDecision(payload) {
+        const summary = payload.summary || {};
+        const prediction = payload.prediction || {};
 
-        const decision = String(prediction.decision || "TEST FIRST");
-        const probability = Number(prediction.inbox_probability || 0);
-
-        latestDecision = decision;
+        latestDecision = String(prediction.decision || "TEST FIRST");
         latestFromBand = String(summary.risk_band || "");
         latestFromScore = Number(summary.final_score || summary.score || 0);
 
-        stepsWrap.classList.add("hidden");
-        decisionBlock.classList.remove("hidden");
-
-        decisionText.textContent = decision;
-        if (decision === "DO NOT SEND") {
+        showStage(decisionPanel);
+        decisionText.classList.remove("pulse-red");
+        decisionText.textContent = latestDecision;
+        if (latestDecision === "DO NOT SEND") {
             decisionText.classList.add("pulse-red");
         }
         animateDecision(decisionText);
-        showOverlay(decision);
+        showOverlay(latestDecision);
 
-        revealText(decisionSub, `Estimated inbox: ${probability.toFixed(1)}%`);
+        decisionSub.textContent = `Estimated inbox: ${Number(prediction.inbox_probability || 0).toFixed(1)}%`;
         primaryIssue.textContent = `Primary issue: ${summary.primary_issue || "No primary issue identified"}`;
         renderLearning(summary.learning_adjustments || []);
     }
@@ -304,20 +257,17 @@
     function renderChanges(changes) {
         changeTags.innerHTML = "";
         (Array.isArray(changes) ? changes : []).slice(0, 4).forEach((line) => {
-            const tag = document.createElement("span");
-            tag.className = "cc-tag";
-            tag.textContent = String(line);
-            changeTags.appendChild(tag);
+            const chip = document.createElement("span");
+            chip.className = "cc-tag";
+            chip.textContent = String(line);
+            changeTags.appendChild(chip);
         });
     }
 
-    function showRewrite(rewrite, originalText) {
-        const beforeText = String(rewrite.original_text || originalText || "");
-        const afterText = String(rewrite.rewritten_text || originalText || "");
-
-        beforeBox.textContent = beforeText;
-        afterBox.textContent = afterText;
-        slideIn(afterBox);
+    function renderRewrite(rewrite, original) {
+        showStage(rewritePanel);
+        beforeBox.textContent = String(rewrite.original_text || original || "");
+        afterBox.textContent = String(rewrite.rewritten_text || original || "");
 
         latestToBand = String(rewrite.to_risk_band || latestFromBand || "");
         latestToScore = Number(rewrite.to_score || latestFromScore || 0);
@@ -329,11 +279,13 @@
             : "Structure improved for better delivery";
         rewardBox.classList.remove("hidden");
 
+        renderChanges(rewrite.rewrite_changes || []);
         successBadge.classList.remove("hidden");
         useRewrite.classList.remove("hidden");
-        renderChanges(rewrite.rewrite_changes || []);
 
         incrementCounters();
+
+        showStage(featureReveal);
     }
 
     async function sendFeedback(outcome) {
@@ -362,8 +314,9 @@
                 headers: { "Content-Type": "application/x-www-form-urlencoded" },
                 body: payload,
             });
-            if (!res.ok) throw new Error();
-
+            if (!res.ok) {
+                throw new Error("feedback failed");
+            }
             feedbackState.textContent = "Feedback saved. Model updated.";
             if (outcome === "spam") {
                 resetStreak();
@@ -391,25 +344,32 @@
     });
 
     analyzeBtn.addEventListener("click", async () => {
-        const email = String(emailInput.value || "").trim();
-        if (!email) {
-            feedbackState.textContent = "Paste an email first.";
+        const rawEmail = String(emailInput.value || "").trim();
+        if (!rawEmail) {
+            feedbackState.textContent = "Paste your email first.";
             return;
         }
 
-        resetUI();
+        resetStepLines();
+        resetOutput();
+        decisionPanel.classList.add("hidden");
+        rewritePanel.classList.add("hidden");
+        featureReveal.classList.add("hidden");
         lockAnalyze(true);
 
         try {
             await runSteps();
-            const analysis = await analyzeEmail(email);
-            showDecision(analysis);
-            const rewrite = await rewriteEmail(email);
-            showRewrite(rewrite, email);
+            const analysis = await analyzeEmail(rawEmail);
+            renderDecision(analysis);
+
+            await new Promise((resolve) => setTimeout(resolve, 220));
+            const rewrite = await rewriteEmail(rawEmail);
+            renderRewrite(rewrite, rawEmail);
         } catch (error) {
-            decisionBlock.classList.remove("hidden");
+            showStage(decisionPanel);
             decisionText.textContent = "ERROR";
             decisionSub.textContent = String(error && error.message ? error.message : "Something went wrong");
+            primaryIssue.textContent = "";
         } finally {
             lockAnalyze(false);
         }
@@ -428,7 +388,5 @@
         });
     }
 
-    magnetic(analyzeBtn);
-    magnetic(useRewrite);
     updateCounters();
 })();
