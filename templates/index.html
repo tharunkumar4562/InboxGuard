@@ -691,6 +691,9 @@ I noticed your recent post and had one short idea to improve reply rates."></tex
           if (mainArea) {
             mainArea.classList.remove('tool-panel-open');
           }
+          if (typeof window.activateTab === 'function') {
+            window.activateTab('dashboard');
+          }
         }
 
         function openPane(key) {
@@ -705,6 +708,9 @@ I noticed your recent post and had one short idea to improve reply rates."></tex
           btn.classList.add('active');
           if (mainArea) {
             mainArea.classList.add('tool-panel-open');
+          }
+          if (typeof window.activateTab === 'function') {
+            window.activateTab('dashboard');
           }
           if (typeof window.igOnToolPaneOpened === 'function') {
             window.igOnToolPaneOpened(key, pane);
@@ -731,13 +737,16 @@ I noticed your recent post and had one short idea to improve reply rates."></tex
           button.addEventListener('click', closePanes);
         });
 
+        window.closeTool = closePanes;
+        window.openTool = openPane;
+        window.igOpenToolPane = openPane;
+        window.igCloseToolPane = closePanes;
+
         document.addEventListener('keydown', (event) => {
           if (event.key === 'Escape') {
             closePanes();
           }
         });
-
-        window.igOpenToolPane = openPane;
       })();
     </script>
 

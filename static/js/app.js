@@ -933,6 +933,8 @@ function activateTab(tab) {
     }
 }
 
+window.activateTab = activateTab;
+
 function setIdleState() {
     hasScanResult = false;
     if (resultSection) {
@@ -2744,8 +2746,20 @@ if (dashboardTab) {
         }
     };
 
+    dashboardTab.addEventListener("click", () => {
+        if (typeof window.closeTool === "function") {
+            window.closeTool();
+        }
+        activateTab("dashboard");
+    });
+
     if (threatScanTab) {
-        threatScanTab.addEventListener("click", () => activateTab("threat-scan"));
+        threatScanTab.addEventListener("click", () => {
+            if (typeof window.closeTool === "function") {
+                window.closeTool();
+            }
+            activateTab("threat-scan");
+        });
     }
     if (startButton) {
         startButton.addEventListener("click", () => {
