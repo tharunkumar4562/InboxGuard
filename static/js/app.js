@@ -1,4 +1,15 @@
 const form = document.getElementById("risk-form");
+const nativeFetch = window.fetch.bind(window);
+
+// Always include credentials so session cookies persist across refresh and API calls.
+window.fetch = (input, init = {}) => {
+    const options = init && typeof init === "object" ? init : {};
+    if (!options.credentials) {
+        options.credentials = "include";
+    }
+    return nativeFetch(input, options);
+};
+
 const resultSection = document.getElementById("result");
 const idleNote = document.getElementById("idle-note");
 const scanPanel = document.querySelector(".scan-panel");
