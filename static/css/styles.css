@@ -195,8 +195,8 @@ body {
 
 .app-shell {
     min-height: 100vh;
-    display: grid;
-    grid-template-columns: 260px 1fr;
+    display: flex;
+    width: 100%;
 }
 
 .sidebar {
@@ -307,61 +307,101 @@ nav {
     pointer-events: none;
 }
 
-.main-area {
+#workspace {
+    display: flex;
+    width: 100%;
+    min-height: 100vh;
+    overflow: hidden;
+}
+
+.main-area,
+#main-panel {
+    flex: 1;
+    min-width: 0;
     padding: 22px;
+    overflow-y: auto;
 }
 
-.tool-pane-open .main-area {
-    padding-right: 516px;
+body.tool-open #main-panel,
+body.tool-open .main-area {
+    padding-right: 460px;
 }
 
-.tool-workspace-backdrop {
-    display: none;
-}
-
-.tool-pane {
+#tool-panel {
     position: fixed;
     top: 0;
     right: 0;
-    width: min(480px, calc(100vw - 80px));
+    width: 420px;
     height: 100vh;
-    overflow: auto;
-    transform: translateX(100%);
-    transition: transform 0.3s ease;
-    z-index: 1000;
-    margin-top: 0 !important;
-    border-left: 1px solid rgba(148, 163, 184, 0.26);
     background: #0b1220;
-    box-shadow: -10px 0 30px rgba(0, 0, 0, 0.4);
-    pointer-events: none;
+    border-left: 1px solid rgba(255, 255, 255, 0.1);
+    transform: translateX(100%);
+    transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    box-shadow: -20px 0 60px rgba(0, 0, 0, 0.6);
 }
 
-.tool-pane.active {
+#tool-panel.hidden {
+    display: none;
+}
+
+#tool-panel.active {
     transform: translateX(0);
-    pointer-events: auto;
 }
 
-.tool-pane-head {
-    position: sticky;
-    top: 0;
-    z-index: 2;
+#tool-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    padding: 14px 16px;
-    background: #0b1220;
-    border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+    padding: 16px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-.tool-pane-title {
+#tool-title {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #f8fafc;
+}
+
+#tool-close {
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: #111827;
+    color: #e5e7eb;
+    border-radius: 999px;
+    padding: 6px 12px;
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+
+#tool-content {
+    flex: 1;
+    overflow: auto;
+    padding: 16px;
+}
+
+.tool-card {
+    background: #0f172a;
+}
+
+.tool-card .tool-pane-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 14px;
+}
+
+.tool-card .tool-pane-title {
     margin: 0;
     font-size: 1.03rem;
     font-weight: 700;
     color: #dbeafe;
 }
 
-.tool-pane-head-close {
+.tool-card .tool-pane-head-close {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -375,12 +415,35 @@ nav {
     cursor: pointer;
 }
 
-.tool-pane-head-close:hover {
+.tool-card .tool-pane-head-close:hover {
     background: #16243d;
 }
 
-.tool-pane .tool-pane-primary {
+.tool-card h3,
+.tool-card h2 {
+    margin-top: 0;
+}
+
+.tool-card .btn-primary,
+.tool-card .btn-secondary,
+.tool-card .btn-danger,
+.tool-card .tool-primary-action {
     width: 100%;
+}
+
+.tool-primary-action {
+    width: 100%;
+}
+
+@media (max-width: 1200px) {
+    body.tool-open #main-panel,
+    body.tool-open .main-area {
+        padding-right: 22px;
+    }
+
+    #tool-panel {
+        width: min(100vw, 420px);
+    }
 }
 
 .profile-shell {
@@ -1444,20 +1507,13 @@ select {
 
 @media (max-width: 1200px) {
     .app-shell {
-        grid-template-columns: 1fr;
+        flex-direction: column;
     }
 
     .sidebar {
         display: none;
     }
 
-    .tool-pane.active {
-        width: 100vw;
-    }
-
-    .tool-pane-open .main-area {
-        padding-right: 22px;
-    }
 }
 
 @media (max-width: 900px) {

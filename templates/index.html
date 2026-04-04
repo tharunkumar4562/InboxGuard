@@ -59,7 +59,7 @@
     </script>
   </head>
   <body>
-    <div class="app-shell">
+    <div id="workspace" class="app-shell">
       <aside class="sidebar">
         <div class="brand-wrap">
           <p class="brand">INBOXGUARD</p>
@@ -69,11 +69,11 @@
           <button id="tab-dashboard" class="nav-item active" type="button">Home</button>
           <button id="tab-threat-scan" class="nav-item" type="button">Scan Email</button>
           <p class="nav-group-label">Tools</p>
-          <button class="nav-item tool-nav-btn" type="button" data-tool="campaign-debugger">Campaign Debugger</button>
-          <button class="nav-item tool-nav-btn" type="button" data-tool="blacklist">Domain Check</button>
+          <button class="nav-item tool-nav-btn" type="button" data-tool="campaign">Campaign Debugger</button>
+          <button class="nav-item tool-nav-btn" type="button" data-tool="domain">Domain Check</button>
           <button class="nav-item tool-nav-btn" type="button" data-tool="seed">Seed Testing</button>
           <button class="nav-item tool-nav-btn" type="button" data-tool="bulk">Bulk Scan</button>
-          <button class="nav-item tool-nav-btn" type="button" data-tool="ops">API + Team</button>
+          <button class="nav-item tool-nav-btn" type="button" data-tool="api">API + Team</button>
           <button class="nav-item tool-nav-btn" type="button" data-tool="insights">Operator Insights</button>
 
           <p class="nav-group-label">Data</p>
@@ -95,7 +95,7 @@
         </a>
       </aside>
 
-      <main class="main-area">
+      <main id="main-panel" class="main-area">
         <header class="topbar">
           <h1 style="display:flex;align-items:center;gap:10px;">
             <img src="/static/logo.svg" width="30" height="30" alt="InboxGuard" style="display:block;" />
@@ -432,7 +432,8 @@ I noticed your recent post and had one short idea to improve reply rates."></tex
           </section>
         </section>
 
-        <section class="card tool-pane" id="campaign-debugger" data-tool-pane="campaign-debugger" style="margin-top: 12px;">
+        <template id="tool-campaign">
+        <section class="card tool-card" id="campaign-debugger" data-tool-pane="campaign" style="margin-top: 12px;">
           <div class="tool-pane-head">
             <h2 class="tool-pane-title">Campaign Failure Debugger</h2>
             <button type="button" class="tool-pane-head-close" data-tool-close>Close</button>
@@ -469,8 +470,10 @@ I noticed your recent post and had one short idea to improve reply rates."></tex
 
           <div id="cd-result" class="micro" style="margin-top: 10px; color: #cbd5e1;">Run diagnosis to see issue, reason, and action.</div>
         </section>
+        </template>
 
-        <section class="card tool-pane" id="blacklist-checker" data-tool-pane="blacklist" style="margin-top: 12px;">
+        <template id="tool-domain">
+        <section class="card tool-card" id="blacklist-checker" data-tool-pane="domain" style="margin-top: 12px;">
           <div class="tool-pane-head">
             <h2 class="tool-pane-title">Domain Blacklist Checker</h2>
             <button type="button" class="tool-pane-head-close" data-tool-close>Close</button>
@@ -485,8 +488,10 @@ I noticed your recent post and had one short idea to improve reply rates."></tex
           <button id="run-blacklist-check" type="button" class="btn-secondary tool-pane-primary" style="margin-top: 10px;">Check Domain Risk</button>
           <p id="blacklist-result" class="micro" style="margin-top: 8px;">No check yet.</p>
         </section>
+        </template>
 
-        <section class="card tool-pane" id="seed-inbox-tracker" data-tool-pane="seed" style="margin-top: 12px;">
+        <template id="tool-seed">
+        <section class="card tool-card" id="seed-inbox-tracker" data-tool-pane="seed" style="margin-top: 12px;">
           <div class="tool-pane-head">
             <h2 class="tool-pane-title">Seed Inbox Testing</h2>
             <button type="button" class="tool-pane-head-close" data-tool-close>Close</button>
@@ -523,8 +528,10 @@ I noticed your recent post and had one short idea to improve reply rates."></tex
             <li>No seed tests logged yet.</li>
           </ul>
         </section>
+        </template>
 
-        <section class="card tool-pane" id="bulk-scan" data-tool-pane="bulk" style="margin-top: 12px;">
+        <template id="tool-bulk">
+        <section class="card tool-card" id="bulk-scan" data-tool-pane="bulk" style="margin-top: 12px;">
           <div class="tool-pane-head">
             <h2 class="tool-pane-title">Bulk Scan (CSV)</h2>
             <button type="button" class="tool-pane-head-close" data-tool-close>Close</button>
@@ -536,8 +543,10 @@ I noticed your recent post and had one short idea to improve reply rates."></tex
             <li>No bulk scan yet.</li>
           </ul>
         </section>
+        </template>
 
-        <section class="card tool-pane" id="ops-api-team" data-tool-pane="ops" style="margin-top: 12px;">
+        <template id="tool-api">
+        <section class="card tool-card" id="ops-api-team" data-tool-pane="api" style="margin-top: 12px;">
           <div class="tool-pane-head">
             <h2 class="tool-pane-title">API + Team Ops</h2>
             <button type="button" class="tool-pane-head-close" data-tool-close>Close</button>
@@ -598,8 +607,10 @@ I noticed your recent post and had one short idea to improve reply rates."></tex
             <li>No operations run yet.</li>
           </ul>
         </section>
+        </template>
 
-        <section class="card tool-pane" id="operator-insights" data-tool-pane="insights" style="margin-top: 12px;">
+        <template id="tool-insights">
+        <section class="card tool-card" id="operator-insights" data-tool-pane="insights" style="margin-top: 12px;">
           <div class="tool-pane-head">
             <h2 class="tool-pane-title">Operator Insights</h2>
             <button type="button" class="tool-pane-head-close" data-tool-close>Close</button>
@@ -620,6 +631,7 @@ I noticed your recent post and had one short idea to improve reply rates."></tex
             <a href="/reports.csv" class="btn-secondary" style="text-decoration:none; display:inline-flex; align-items:center; justify-content:center;">Download Reports CSV</a>
           </div>
         </section>
+        </template>
 
         <section class="card" id="trust-social-proof" style="margin-top: 12px;">
           <h3>Trusted by teams who send before sunrise</h3>
@@ -640,6 +652,13 @@ I noticed your recent post and had one short idea to improve reply rates."></tex
           <a href="/blog" class="link-action">Blog</a>
         </div>
       </main>
+      <div id="tool-panel" class="hidden" aria-hidden="true">
+        <div id="tool-header">
+          <span id="tool-title">Tool</span>
+          <button id="tool-close" type="button" onclick="closeTool()">Close</button>
+        </div>
+        <div id="tool-content"></div>
+      </div>
     </div>
 
     <div id="lead-capture-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="lead-capture-title">
@@ -669,72 +688,6 @@ I noticed your recent post and had one short idea to improve reply rates."></tex
         <button id="auth-close" type="button" class="link-action" onclick="window.igAuthClose && window.igAuthClose()">Not now</button>
       </div>
     </div>
-
-    <div id="decisionOverlay" class="decision-overlay hidden" role="status" aria-live="polite">
-      <div class="decision-overlay-card">
-        <p id="decisionOverlayText">Decision</p>
-      </div>
-    </div>
-
-    <div id="toolWorkspaceBackdrop" class="tool-workspace-backdrop hidden" aria-hidden="true"></div>
-
-    <script>
-      (function () {
-        const buttons = Array.from(document.querySelectorAll('.tool-nav-btn'));
-        const panes = Array.from(document.querySelectorAll('.tool-pane'));
-        const closeButtons = Array.from(document.querySelectorAll('[data-tool-close]'));
-
-        function closePanes() {
-          panes.forEach((pane) => pane.classList.remove('active'));
-          buttons.forEach((btn) => btn.classList.remove('active'));
-          document.body.classList.remove('tool-pane-open');
-        }
-
-        function openPane(key) {
-          closePanes();
-          const pane = panes.find((item) => item.getAttribute('data-tool-pane') === key);
-          const btn = buttons.find((item) => item.getAttribute('data-tool') === key);
-          if (!pane || !btn) {
-            console.error('Missing panel for:', key);
-            return;
-          }
-          pane.classList.add('active');
-          btn.classList.add('active');
-          document.body.classList.add('tool-pane-open');
-          if (typeof window.igOnToolPaneOpened === 'function') {
-            window.igOnToolPaneOpened(key, pane);
-          }
-          const firstInput = pane.querySelector('input,select,textarea,button');
-          if (firstInput && typeof firstInput.focus === 'function') {
-            setTimeout(() => firstInput.focus(), 60);
-          }
-        }
-
-        buttons.forEach((button) => {
-          button.addEventListener('click', () => {
-            const key = button.getAttribute('data-tool') || '';
-            const open = button.classList.contains('active');
-            if (open) {
-              closePanes();
-            } else {
-              openPane(key);
-            }
-          });
-        });
-
-        closeButtons.forEach((button) => {
-          button.addEventListener('click', closePanes);
-        });
-
-        document.addEventListener('keydown', (event) => {
-          if (event.key === 'Escape') {
-            closePanes();
-          }
-        });
-
-        window.igOpenToolPane = openPane;
-      })();
-    </script>
 
     <script src="/static/js/app.js?v=20260404-micro7"></script>
   </body>
