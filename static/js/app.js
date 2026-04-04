@@ -195,6 +195,36 @@ function showError(message) {
     setTimeout(() => errorBanner.classList.add("hidden"), 3800);
 }
 
+function setListMessage(node, message) {
+    if (!node) {
+        return;
+    }
+    node.innerHTML = "";
+    const li = document.createElement("li");
+    li.textContent = String(message || "");
+    node.appendChild(li);
+}
+
+async function parseApiError(response, fallbackMessage) {
+    const payload = await response.json().catch(() => ({}));
+    const detail = String(payload.detail || "").trim();
+    if (detail === "AUTH_REQUIRED") {
+        showError("Sign in required for this tool.");
+        if (typeof showAuthModal === "function") {
+            showAuthModal();
+        }
+        return "Sign in required for this tool.";
+    }
+    if (detail === "SUBSCRIPTION_REQUIRED") {
+        showError("Subscription required for this tool.");
+        if (typeof openPricingModal === "function") {
+            openPricingModal();
+        }
+        return "Subscription required for this tool.";
+    }
+    return detail || String(fallbackMessage || "Request failed.");
+}
+
 function trackEvent(eventName, params) {
     if (typeof window.gtag !== "function") {
         return;
@@ -307,17 +337,37 @@ function refreshToolPaneData(toolKey) {
     }
 
     if (key === "seed") {
-        refreshSeedTests().catch(() => null);
+        refreshSeedTests().catch((error) => {
+            const msg = error && error.message ? error.message : "Could not load seed tests.";
+            setListMessage(seedTestListNode, msg);
+            showError(msg);
+        });
         return;
     }
     if (key === "ops") {
-        listApiKeys().catch(() => null);
-        listTeams().catch(() => null);
+        listApiKeys().catch((error) => {
+            const msg = error && error.message ? error.message : "Could not load API keys.";
+            setListMessage(apiKeyListNode, msg);
+            showError(msg);
+        });
+        listTeams().catch((error) => {
+            const msg = error && error.message ? error.message : "Could not load teams.";
+            setListMessage(teamListNode, msg);
+            showError(msg);
+        });
         return;
     }
     if (key === "insights") {
-        refreshOutcomeStats().catch(() => null);
-        refreshJobs().catch(() => null);
+        refreshOutcomeStats().catch((error) => {
+            const msg = error && error.message ? error.message : "Could not load outcome stats.";
+            setListMessage(outcomeStatsListNode, msg);
+            showError(msg);
+        });
+        refreshJobs().catch((error) => {
+            const msg = error && error.message ? error.message : "Could not load async jobs.";
+            setListMessage(jobListNode, msg);
+            showError(msg);
+        });
     }
 }
 
@@ -1453,12 +1503,15 @@ async function runBulkScan() {
         showError("Select a CSV file first.");
         return;
     }
+    setListMessage(bulkResultsNode, "Running bulk scan...");
     const payload = new FormData();
     payload.set("file", bulkFileInput.files[0]);
     payload.set("analysis_mode", analysisModeInput ? analysisModeInput.value : "content");
     const response = await fetch("/bulk-analyze", { method: "POST", body: payload });
     if (!response.ok) {
-        throw new Error("Bulk scan failed. Sign in and verify CSV format.");
+        const message = await parseApiError(response, "Bulk scan failed. Verify CSV format and try again.");
+        setListMessage(bulkResultsNode, message);
+        throw new Error(message);
     }
     const data = await response.json();
     if (!bulkResultsNode) {
@@ -1480,9 +1533,12 @@ async function runBulkScan() {
 async function createApiKey() {
     const payload = new FormData();
     payload.set("name", apiKeyNameInput ? String(apiKeyNameInput.value || "Primary key") : "Primary key");
+    setListMessage(opsOutputNode, "Creating API key...");
     const response = await fetch("/api-keys", { method: "POST", body: payload });
     if (!response.ok) {
-        throw new Error("Could not create API key. Sign in first.");
+        const message = await parseApiError(response, "Could not create API key.");
+        setListMessage(opsOutputNode, message);
+        throw new Error(message);
     }
     const data = await response.json();
     if (opsOutputNode) {
@@ -1494,9 +1550,12 @@ async function createApiKey() {
 }
 
 async function listApiKeys() {
+    setListMessage(apiKeyListNode, "Loading API keys...");
     const response = await fetch("/api-keys", { method: "GET" });
     if (!response.ok) {
-        throw new Error("Could not load API keys. Sign in first.");
+        const message = await parseApiError(response, "Could not load API keys.");
+        setListMessage(apiKeyListNode, message);
+        throw new Error(message);
     }
     const data = await response.json();
     const items = Array.isArray(data.items) ? data.items : [];
@@ -1528,11 +1587,14 @@ async function revokeApiKey() {
         showError("Enter a valid API key ID to revoke.");
         return;
     }
+    setListMessage(opsOutputNode, `Revoking API key #${keyId}...`);
     const payload = new FormData();
     payload.set("key_id", String(keyId));
     const response = await fetch("/api-keys/revoke", { method: "POST", body: payload });
     if (!response.ok) {
-        throw new Error("Could not revoke API key.");
+        const message = await parseApiError(response, "Could not revoke API key.");
+        setListMessage(opsOutputNode, message);
+        throw new Error(message);
     }
     showError(`API key #${keyId} revoked.`);
     await listApiKeys();
@@ -1541,9 +1603,12 @@ async function revokeApiKey() {
 async function createTeam() {
     const payload = new FormData();
     payload.set("name", teamNameInput ? String(teamNameInput.value || "My Team") : "My Team");
+    setListMessage(opsOutputNode, "Creating team...");
     const response = await fetch("/teams", { method: "POST", body: payload });
     if (!response.ok) {
-        throw new Error("Could not create team. Sign in first.");
+        const message = await parseApiError(response, "Could not create team.");
+        setListMessage(opsOutputNode, message);
+        throw new Error(message);
     }
     const data = await response.json();
     if (opsOutputNode) {
@@ -1554,9 +1619,12 @@ async function createTeam() {
 }
 
 async function listTeams() {
+    setListMessage(teamListNode, "Loading teams...");
     const response = await fetch("/teams", { method: "GET" });
     if (!response.ok) {
-        throw new Error("Could not load teams. Sign in first.");
+        const message = await parseApiError(response, "Could not load teams.");
+        setListMessage(teamListNode, message);
+        throw new Error(message);
     }
     const data = await response.json();
     const items = Array.isArray(data.items) ? data.items : [];
@@ -1588,23 +1656,28 @@ async function addTeamMember() {
         showError("Enter team ID and member email.");
         return;
     }
+    setListMessage(opsOutputNode, `Adding ${email} to team #${teamId}...`);
     const payload = new FormData();
     payload.set("team_id", String(teamId));
     payload.set("email", email);
     payload.set("role", role);
     const response = await fetch("/teams/member", { method: "POST", body: payload });
     if (!response.ok) {
-        const errorBody = await response.json().catch(() => ({}));
-        throw new Error(String(errorBody.detail || "Could not add team member."));
+        const message = await parseApiError(response, "Could not add team member.");
+        setListMessage(opsOutputNode, message);
+        throw new Error(message);
     }
     showError(`Added ${email} to team #${teamId} as ${role}.`);
     await listTeams();
 }
 
 async function refreshOutcomeStats() {
+    setListMessage(outcomeStatsListNode, "Loading outcome stats...");
     const response = await fetch("/outcome-stats", { method: "GET" });
     if (!response.ok) {
-        throw new Error("Could not load outcome stats. Sign in first.");
+        const message = await parseApiError(response, "Could not load outcome stats.");
+        setListMessage(outcomeStatsListNode, message);
+        throw new Error(message);
     }
     const data = await response.json();
     if (!outcomeStatsListNode) {
@@ -1623,9 +1696,12 @@ async function refreshOutcomeStats() {
 }
 
 async function refreshJobs() {
+    setListMessage(jobListNode, "Loading async jobs...");
     const response = await fetch("/jobs?limit=12", { method: "GET" });
     if (!response.ok) {
-        throw new Error("Could not load async jobs.");
+        const message = await parseApiError(response, "Could not load async jobs.");
+        setListMessage(jobListNode, message);
+        throw new Error(message);
     }
     const data = await response.json();
     const items = Array.isArray(data.items) ? data.items : [];
@@ -2262,11 +2338,18 @@ async function runBlacklistCheck() {
         showError("Enter a domain first.");
         return;
     }
+    if (blacklistResultNode) {
+        blacklistResultNode.textContent = "Checking domain risk...";
+    }
     const payload = new FormData();
     payload.set("domain", domain);
     const response = await fetch("/blacklist-check", { method: "POST", body: payload });
     if (!response.ok) {
-        throw new Error("Could not run blacklist check.");
+        const message = await parseApiError(response, "Could not run blacklist check.");
+        if (blacklistResultNode) {
+            blacklistResultNode.textContent = message;
+        }
+        throw new Error(message);
     }
     const data = await response.json();
     if (blacklistResultNode) {
