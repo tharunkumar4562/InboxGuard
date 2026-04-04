@@ -135,12 +135,19 @@
               <option value="trial">Trial Pro</option>
               <option value="usage">Usage-Based</option>
             </select>
+            <select id="plan-type" class="hidden" aria-hidden="true" tabindex="-1">
+              <option value="monthly" selected>Monthly Pro</option>
+              <option value="annual">Annual Pro</option>
+              <option value="trial">Trial Pro</option>
+              <option value="usage">Usage-Based</option>
+            </select>
             <button id="refresh-plans" type="button" class="secondary-btn" style="margin-top:8px;">Refresh Plans</button>
             <ul id="plans-output" class="compact-list" style="margin-top:8px;">
               <li>Plan details load from server when requested.</li>
             </ul>
             <button id="pay-btn" type="button" class="primary-btn">Unlock Safe Sending</button>
             <button id="request-access" type="button" class="secondary-btn">Request Access</button>
+            <button id="cancel-subscription" type="button" class="secondary-btn hidden">Cancel Subscription</button>
             <button onclick="closePricingModal()" class="secondary-btn">Cancel</button>
           </div>
         </div>
@@ -249,6 +256,34 @@ I noticed your recent post and had one short idea to improve reply rates."></tex
               </article>
             </section>
 
+            <article id="biggest-risk-card" class="status-card" style="margin-top: 10px;">
+              <p class="status-label">Biggest Risk</p>
+              <p id="biggest-risk-title" class="status-value pending">No scan yet</p>
+              <p id="biggest-risk-impact" class="impact-badge">LOW</p>
+              <p id="biggest-risk-desc" class="micro">Run analysis to detect the top deliverability blocker.</p>
+            </article>
+
+            <div class="rewrite-proof" style="margin-top: 8px;">
+              <p class="rewrite-proof-title">What Is Hurting Deliverability:</p>
+              <ul id="hurt-list" class="compact-list">
+                <li>No scan yet - run analysis to detect deliverability risks.</li>
+              </ul>
+            </div>
+
+            <div class="rewrite-proof" style="margin-top: 8px;">
+              <p class="rewrite-proof-title">Top Fixes:</p>
+              <ul id="top-fixes-list" class="compact-list">
+                <li>No fixes loaded yet - run analysis first.</li>
+              </ul>
+            </div>
+
+            <div class="rewrite-proof" style="margin-top: 8px;">
+              <p class="rewrite-proof-title">If You Send This Now:</p>
+              <ul id="consequence-list" class="compact-list">
+                <li>Risk and impact summary appears after analysis.</li>
+              </ul>
+            </div>
+
             <div class="rewrite-proof" style="margin-top: 8px;">
               <p class="rewrite-proof-title">Why this is happening:</p>
               <ul id="decision-why" class="compact-list">
@@ -278,6 +313,7 @@ I noticed your recent post and had one short idea to improve reply rates."></tex
             </div>
 
             <button id="risk-fix-now" type="button" class="btn-primary decision-cta">Make This Safe to Send</button>
+            <button id="fix-now" type="button" class="btn-secondary" style="margin-top: 8px;">Fix Issues</button>
             <button id="risk-fix-async" type="button" class="btn-secondary" style="margin-top: 8px;">Generate Safe Rewrite In Background</button>
             <p class="decision-cta-subtext">Applies safe rewrite patterns used by inbox-placed emails.</p>
             <p id="trust-hook" class="trust-hook">Based on patterns commonly flagged by Gmail and Outlook filters.</p>
@@ -367,6 +403,7 @@ I noticed your recent post and had one short idea to improve reply rates."></tex
             <div class="actions" style="margin-top: 12px;">
               <button id="save-fix" type="button" class="btn-secondary">Save Fix</button>
               <button id="use-fixed" type="button" class="btn-primary">Copy Fixed Email</button>
+              <button id="restore-original" type="button" class="btn-secondary">Restore Original</button>
               <button id="send-gmail" type="button" class="btn-secondary">Open in Gmail</button>
               <button id="edit-manual" type="button" class="btn-secondary">Edit Manually</button>
             </div>
