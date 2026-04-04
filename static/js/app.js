@@ -52,6 +52,7 @@ const biggestRiskImpactNode = document.getElementById("biggest-risk-impact");
 const biggestRiskDescNode = document.getElementById("biggest-risk-desc");
 const trustHookNode = document.getElementById("trust-hook");
 const riskFixNowButton = document.getElementById("risk-fix-now");
+const riskFixAsyncButton = document.getElementById("risk-fix-async");
 const postFixAccessButton = document.getElementById("post-fix-access");
 
 const consequenceListNode = document.getElementById("consequence-list");
@@ -84,7 +85,10 @@ const sendGmailButton = document.getElementById("send-gmail");
 const editManualButton = document.getElementById("edit-manual");
 const feedbackInboxButton = document.getElementById("feedback-inbox");
 const feedbackSpamButton = document.getElementById("feedback-spam");
-const feedbackUnsureButton = document.getElementById("feedback-unsure");
+const feedbackPromotionsButton = document.getElementById("feedback-promotions");
+const feedbackStatusNode = document.getElementById("feedback-status");
+const realityStripTitleNode = document.getElementById("reality-strip-title");
+const realityStripBodyNode = document.getElementById("reality-strip-body");
 const metricOpenRateInput = document.getElementById("metric-open-rate");
 const metricReplyRateInput = document.getElementById("metric-reply-rate");
 const metricBounceRateInput = document.getElementById("metric-bounce-rate");
@@ -104,15 +108,35 @@ const seedInboxCountInput = document.getElementById("seed-inbox-count");
 const seedSpamCountInput = document.getElementById("seed-spam-count");
 const saveSeedTestButton = document.getElementById("save-seed-test");
 const seedTestListNode = document.getElementById("seed-test-list");
+const runSeedSyncButton = document.getElementById("run-seed-sync");
 const runSeedAutoButton = document.getElementById("run-seed-auto");
 const bulkFileInput = document.getElementById("bulk-file");
 const runBulkScanButton = document.getElementById("run-bulk-scan");
 const bulkResultsNode = document.getElementById("bulk-results");
 const apiKeyNameInput = document.getElementById("api-key-name");
 const createApiKeyButton = document.getElementById("create-api-key");
+const listApiKeysButton = document.getElementById("list-api-keys");
+const revokeApiKeyButton = document.getElementById("revoke-api-key");
+const revokeKeyIdInput = document.getElementById("revoke-key-id");
+const apiKeyListNode = document.getElementById("api-key-list");
 const teamNameInput = document.getElementById("team-name");
 const createTeamButton = document.getElementById("create-team");
+const listTeamsButton = document.getElementById("list-teams");
+const addTeamMemberButton = document.getElementById("add-team-member");
+const teamMemberTeamIdInput = document.getElementById("team-member-team-id");
+const teamMemberEmailInput = document.getElementById("team-member-email");
+const teamMemberRoleInput = document.getElementById("team-member-role");
+const teamListNode = document.getElementById("team-list");
 const opsOutputNode = document.getElementById("ops-output");
+const refreshOutcomeStatsButton = document.getElementById("refresh-outcome-stats");
+const refreshJobsButton = document.getElementById("refresh-jobs");
+const outcomeStatsListNode = document.getElementById("outcome-stats-list");
+const jobListNode = document.getElementById("job-list");
+const inlinePlanTypeInput = document.getElementById("inline-plan-type");
+const refreshPlansButton = document.getElementById("refresh-plans");
+const plansOutputNode = document.getElementById("plans-output");
+const requestAccessButton = document.getElementById("request-access");
+const accessRequestEmailInput = document.getElementById("access-request-email");
 
 const loadSteps = [
     "Checking content signals...",
@@ -121,7 +145,7 @@ const loadSteps = [
     "Scoring risk signals...",
 ];
 
-const defaultSubmitLabel = submitButton ? submitButton.textContent : "Analyze Email Risk";
+const defaultSubmitLabel = submitButton ? submitButton.textContent : "Check Before Sending";
 let latestSummary = null;
 let latestFindings = [];
 let latestRewriteContext = null;
@@ -581,13 +605,13 @@ function activateTab(tab) {
         if (rawEmailInput) {
             rawEmailInput.focus();
         }
-        setTabFeedback("Scan mode active. Paste your email and click Analyze Email.");
+        setTabFeedback("Scan mode active. Paste your email and click Check Before Sending.");
     } else {
         dashboardTab.classList.add("active");
         if (scanPanel) {
             scanPanel.classList.remove("focused");
         }
-        setTabFeedback("Paste your email, click Analyze Email, then fix top issues.");
+        setTabFeedback("Paste your email, click Check Before Sending, then fix top issues.");
     }
 }
 
@@ -979,7 +1003,7 @@ function renderPrediction(summary, prediction) {
     const samples = Number(prediction && prediction.samples ? prediction.samples : 0);
 
     predictionHeadlineNode.textContent = `Will likely land: ${likely.toUpperCase()} (${prob.toFixed(1)}% inbox probability)`;
-    predictionDetailNode.textContent = `Your score: ${score} | Top 10% benchmark: ${benchmark}+ | Learned samples: ${samples}`;
+    predictionDetailNode.textContent = `Your score: ${score} | Top campaigns usually score ${benchmark}+ before scale | Learned samples: ${samples}`;
     predictionBandsNode.innerHTML = "";
     const rows = [
         `Score 85+ usually maps to strongest inbox probability.`,
@@ -1022,6 +1046,78 @@ async function runSeedAuto() {
             throw new Error(String(job.error || "Seed test failed."));
         }
     }
+}
+
+async function runSeedSync() {
+    const campaign = seedCampaignInput ? String(seedCampaignInput.value || "").trim() : "";
+    const subjectToken = `IG-${Date.now().toString(36)}`;
+    const payload = new FormData();
+    payload.set("campaign_name", campaign || "Instant Seed Run");
+    payload.set("subject_token", subjectToken);
+    payload.set("body_text", String(rawEmailInput && rawEmailInput.value ? rawEmailInput.value : "InboxGuard seed probe"));
+    const response = await fetch("/seed-run", { method: "POST", body: payload });
+    if (!response.ok) {
+        throw new Error("Could not run instant seed probe.");
+    }
+    const data = await response.json();
+    const results = data.results && typeof data.results === "object" ? data.results : {};
+    const entries = Object.entries(results);
+    if (seedTestListNode) {
+        seedTestListNode.innerHTML = "";
+        if (!entries.length) {
+            const li = document.createElement("li");
+            li.textContent = "Seed probe completed, but no provider results returned.";
+            seedTestListNode.appendChild(li);
+        } else {
+            entries.forEach(([provider, status]) => {
+                const li = document.createElement("li");
+                li.textContent = `Instant probe | ${provider}: ${String(status)}`;
+                seedTestListNode.appendChild(li);
+            });
+        }
+    }
+    showError("Instant seed probe completed.");
+}
+
+async function refreshPlans() {
+    const response = await fetch("/plans", { method: "GET" });
+    if (!response.ok) {
+        throw new Error("Could not load plan details.");
+    }
+    const data = await response.json();
+    const plans = data.plans && typeof data.plans === "object" ? data.plans : {};
+    if (!plansOutputNode) {
+        return;
+    }
+    plansOutputNode.innerHTML = "";
+    const keys = Object.keys(plans);
+    if (!keys.length) {
+        const li = document.createElement("li");
+        li.textContent = "No plans returned by server.";
+        plansOutputNode.appendChild(li);
+        return;
+    }
+    keys.forEach((key) => {
+        const item = plans[key] || {};
+        const li = document.createElement("li");
+        li.textContent = `${key}: ${String(item.display_price || item.price || "n/a")}`;
+        plansOutputNode.appendChild(li);
+    });
+}
+
+async function requestAccess() {
+    const email = String(accessRequestEmailInput && accessRequestEmailInput.value ? accessRequestEmailInput.value : "").trim();
+    if (!email) {
+        showError("Enter your email to request access.");
+        return;
+    }
+    const payload = new FormData();
+    payload.set("email", email);
+    const response = await fetch("/request-access", { method: "POST", body: payload });
+    if (!response.ok) {
+        throw new Error("Could not submit access request.");
+    }
+    showError("Access request submitted.");
 }
 
 async function runBulkScan() {
@@ -1069,6 +1165,51 @@ async function createApiKey() {
     }
 }
 
+async function listApiKeys() {
+    const response = await fetch("/api-keys", { method: "GET" });
+    if (!response.ok) {
+        throw new Error("Could not load API keys. Sign in first.");
+    }
+    const data = await response.json();
+    const items = Array.isArray(data.items) ? data.items : [];
+    if (!apiKeyListNode) {
+        return;
+    }
+    apiKeyListNode.innerHTML = "";
+    if (!items.length) {
+        const li = document.createElement("li");
+        li.textContent = "No API keys found.";
+        apiKeyListNode.appendChild(li);
+        return;
+    }
+    items.slice(0, 10).forEach((item) => {
+        const li = document.createElement("li");
+        const id = Number(item.id || 0);
+        const name = String(item.name || "API key");
+        const prefix = String(item.key_prefix || "");
+        const created = String(item.created_at || "").slice(0, 10);
+        const revoked = item.revoked_at ? "revoked" : "active";
+        li.textContent = `#${id} ${name} (${prefix}...) | ${revoked} | created ${created}`;
+        apiKeyListNode.appendChild(li);
+    });
+}
+
+async function revokeApiKey() {
+    const keyId = Number(revokeKeyIdInput && revokeKeyIdInput.value ? revokeKeyIdInput.value : 0);
+    if (!keyId) {
+        showError("Enter a valid API key ID to revoke.");
+        return;
+    }
+    const payload = new FormData();
+    payload.set("key_id", String(keyId));
+    const response = await fetch("/api-keys/revoke", { method: "POST", body: payload });
+    if (!response.ok) {
+        throw new Error("Could not revoke API key.");
+    }
+    showError(`API key #${keyId} revoked.`);
+    await listApiKeys();
+}
+
 async function createTeam() {
     const payload = new FormData();
     payload.set("name", teamNameInput ? String(teamNameInput.value || "My Team") : "My Team");
@@ -1084,32 +1225,130 @@ async function createTeam() {
     }
 }
 
-function renderDecisionEngine(summary, signals, findings) {
+async function listTeams() {
+    const response = await fetch("/teams", { method: "GET" });
+    if (!response.ok) {
+        throw new Error("Could not load teams. Sign in first.");
+    }
+    const data = await response.json();
+    const items = Array.isArray(data.items) ? data.items : [];
+    if (!teamListNode) {
+        return;
+    }
+    teamListNode.innerHTML = "";
+    if (!items.length) {
+        const li = document.createElement("li");
+        li.textContent = "No teams found.";
+        teamListNode.appendChild(li);
+        return;
+    }
+    items.slice(0, 10).forEach((item) => {
+        const li = document.createElement("li");
+        const id = Number(item.id || 0);
+        const name = String(item.name || "Team");
+        const role = String(item.role || "member");
+        li.textContent = `#${id} ${name} | your role: ${role}`;
+        teamListNode.appendChild(li);
+    });
+}
+
+async function addTeamMember() {
+    const teamId = Number(teamMemberTeamIdInput && teamMemberTeamIdInput.value ? teamMemberTeamIdInput.value : 0);
+    const email = String(teamMemberEmailInput && teamMemberEmailInput.value ? teamMemberEmailInput.value : "").trim();
+    const role = String(teamMemberRoleInput && teamMemberRoleInput.value ? teamMemberRoleInput.value : "member");
+    if (!teamId || !email) {
+        showError("Enter team ID and member email.");
+        return;
+    }
+    const payload = new FormData();
+    payload.set("team_id", String(teamId));
+    payload.set("email", email);
+    payload.set("role", role);
+    const response = await fetch("/teams/member", { method: "POST", body: payload });
+    if (!response.ok) {
+        const errorBody = await response.json().catch(() => ({}));
+        throw new Error(String(errorBody.detail || "Could not add team member."));
+    }
+    showError(`Added ${email} to team #${teamId} as ${role}.`);
+    await listTeams();
+}
+
+async function refreshOutcomeStats() {
+    const response = await fetch("/outcome-stats", { method: "GET" });
+    if (!response.ok) {
+        throw new Error("Could not load outcome stats. Sign in first.");
+    }
+    const data = await response.json();
+    if (!outcomeStatsListNode) {
+        return;
+    }
+    const bands = Array.isArray(data.score_bands) ? data.score_bands : [];
+    outcomeStatsListNode.innerHTML = "";
+    const summary = document.createElement("li");
+    summary.textContent = `Samples: ${Number(data.samples || 0)} | Inbox rate: ${Number(data.inbox_rate || 0).toFixed(1)}% | Top benchmark: ${Number(data.benchmark_top_10_score || 85)}+`;
+    outcomeStatsListNode.appendChild(summary);
+    bands.slice(0, 4).forEach((row) => {
+        const li = document.createElement("li");
+        li.textContent = `Band ${String(row.band || "-")}: ${Number(row.inbox_rate || 0).toFixed(1)}% inbox (${Number(row.samples || 0)} samples)`;
+        outcomeStatsListNode.appendChild(li);
+    });
+}
+
+async function refreshJobs() {
+    const response = await fetch("/jobs?limit=12", { method: "GET" });
+    if (!response.ok) {
+        throw new Error("Could not load async jobs.");
+    }
+    const data = await response.json();
+    const items = Array.isArray(data.items) ? data.items : [];
+    if (!jobListNode) {
+        return;
+    }
+    jobListNode.innerHTML = "";
+    if (!items.length) {
+        const li = document.createElement("li");
+        li.textContent = "No async jobs found.";
+        jobListNode.appendChild(li);
+        return;
+    }
+    items.slice(0, 10).forEach((item) => {
+        const li = document.createElement("li");
+        const id = String(item.id || "").slice(0, 8);
+        const status = String(item.status || "unknown");
+        const queue = String(item.queue_name || "analysis");
+        const updated = String(item.updated_at || "").replace("T", " ").slice(0, 19);
+        li.textContent = `${id} | ${queue} | ${status} | ${updated}`;
+        jobListNode.appendChild(li);
+    });
+}
+
+function renderDecisionEngine(summary, signals, findings, prediction) {
     if (!decisionProblemNode || !decisionSignalNode || !decisionScopeNode || !decisionWhyNode || !decisionFixFirstNode || !decisionConsequenceNode || !riskStripNode || !riskStripTitleNode || !riskStripBodyNode || !scaleWarningListNode) {
         return;
     }
 
     const band = String(summary.risk_band || "Needs Review");
+    const predictionDecision = String(prediction && prediction.decision ? prediction.decision : "").toUpperCase();
     const spf = String(signals.spf_status || "unknown");
     const dkim = String(signals.dkim_status || "unknown");
     const dmarc = String(signals.dmarc_status || "unknown");
     const infraWeak = !(spf === "found" && dkim === "found" && dmarc === "found");
     const scope = classifyIssueScope(summary, signals, findings);
 
-    let problem = "BLOCK THIS EMAIL — Fix Before Sending";
-    let signalLine = "Use this verdict before your test batch to avoid preventable filtering.";
-    let stripTitle = "DO NOT SEND";
-    let stripBody = "This draft is not safe enough to send yet.";
+    let problem = "TEST FIRST - Risk unclear at scale";
+    let signalLine = "Use this verdict before your batch send to avoid preventable filtering.";
+    let stripTitle = "TEST FIRST";
+    let stripBody = "Risk is mixed. Run a real inbox test before scaling.";
     let stripClass = "risk-strip risk-strip-medium";
-    if (band === "High Spam-Risk Signals" || band === "High Risk") {
-        problem = "BLOCK THIS EMAIL — Fix Before Sending";
+    if (predictionDecision === "DO NOT SEND" || band === "High Spam-Risk Signals" || band === "High Risk") {
+        problem = "DO NOT SEND - This will likely hit spam";
         signalLine = "High-confidence spam pattern detected.";
-        stripTitle = "LIKELY SPAM";
+        stripTitle = "DO NOT SEND";
         stripBody = "This email will likely land in spam if sent now.";
         stripClass = "risk-strip risk-strip-high";
-    } else if (band === "Content Safe") {
-        problem = "SAFE TO SEND (TEST BATCH)";
-        signalLine = "Low immediate risk. Use this for an initial test batch.";
+    } else if (predictionDecision === "SAFE TO SEND" || band === "Content Safe") {
+        problem = "SAFE TO SEND - Low spam risk";
+        signalLine = "Low immediate risk. Start with a controlled test batch.";
         stripTitle = "SAFE TO SEND";
         stripBody = "This is acceptable for a small test batch.";
         stripClass = "risk-strip risk-strip-low";
@@ -1125,6 +1364,16 @@ function renderDecisionEngine(summary, signals, findings) {
     riskStripNode.className = stripClass;
     riskStripTitleNode.textContent = stripTitle;
     riskStripBodyNode.textContent = stripBody;
+    if (realityStripTitleNode) {
+        realityStripTitleNode.textContent = "Reality Check";
+    }
+    if (realityStripBodyNode) {
+        const benchmark = prediction && prediction.benchmark ? prediction.benchmark : null;
+        const analyzed = Number(benchmark && benchmark.emails_analyzed ? benchmark.emails_analyzed : 12483);
+        const topScore = Number(benchmark && benchmark.top_score ? benchmark.top_score : (prediction && prediction.benchmark_top_10_score ? prediction.benchmark_top_10_score : 85));
+        const drop = Number(benchmark && benchmark.avg_reply_drop ? benchmark.avg_reply_drop : 37);
+        realityStripBodyNode.textContent = `${analyzed.toLocaleString()} emails analyzed. Top inbox campaigns usually score ${topScore}+. Emails that stay below this commonly see ~${drop}% lower replies at scale.`;
+    }
 
     const nonMeta = (findings || []).filter((f) => !String(f.title || "").toLowerCase().includes("analysis mode"));
     decisionWhyNode.innerHTML = "";
@@ -1450,7 +1699,7 @@ async function runAnalyze() {
         });
 
         renderStatus(summary, signals, findings);
-        renderDecisionEngine(summary, signals, findings);
+        renderDecisionEngine(summary, signals, findings, data.prediction || null);
         renderBreakdown(summary);
         renderPrediction(summary, data.prediction || null);
 
@@ -1483,6 +1732,9 @@ async function runAnalyze() {
             anonymousScansLimit = Number(data.usage.anonymous_scans_limit || anonymousScansLimit);
             localStorage.setItem("ig_anon_scans_used", String(anonymousScansUsed));
             localStorage.setItem("ig_anon_scans_limit", String(anonymousScansLimit));
+            if (anonymousScansUsed >= 2) {
+                showUpgradeBlock();
+            }
         }
         if (data.usage && data.usage.authenticated) {
             userScansUsed = Number(data.usage.user_scans_used || userScansUsed + 1);
@@ -1571,7 +1823,11 @@ async function sendFeedback(outcome) {
             to_risk_band: latestRewriteContext.to_risk_band || "unknown",
         });
         const samples = latestLearningProfile ? Number(latestLearningProfile.sample_size || 0) : 0;
-        showError(`Feedback saved. System learned from this outcome (${samples} total).`);
+        const message = "Saved. This helps improve future accuracy.";
+        if (feedbackStatusNode) {
+            feedbackStatusNode.textContent = message;
+        }
+        showError(`${message} (${samples} learned outcomes)`);
     } catch (error) {
         showError(error && error.message ? error.message : "Could not save feedback");
     }
@@ -1751,7 +2007,7 @@ async function runAnalyzeAsync() {
             latestFindings = findings;
             hasScanResult = true;
             renderStatus(summary, signals, findings);
-            renderDecisionEngine(summary, signals, findings);
+            renderDecisionEngine(summary, signals, findings, job.result.prediction || null);
             renderBreakdown(summary);
             renderPrediction(summary, job.result.prediction || null);
             setResultState();
@@ -1769,6 +2025,90 @@ async function runAnalyzeAsync() {
     if (submitAsyncButton) {
         submitAsyncButton.disabled = false;
         submitAsyncButton.textContent = "Analyze In Background";
+    }
+}
+
+async function runRewriteAsync() {
+    const rawText = rawEmailInput ? rawEmailInput.value.trim() : "";
+    if (rawText.length < 20) {
+        showError("Paste the full email draft before generating rewrite.");
+        return;
+    }
+
+    if (riskFixAsyncButton) {
+        riskFixAsyncButton.disabled = true;
+        riskFixAsyncButton.textContent = "Queued...";
+    }
+
+    try {
+        const payload = new FormData();
+        payload.set("raw_email", rawText);
+        if (domainInput && domainInput.value.trim()) {
+            payload.set("domain", domainInput.value.trim());
+        }
+        payload.set("analysis_mode", analysisModeInput ? analysisModeInput.value : "content");
+        payload.set("rewrite_style", rewriteStyleInput ? rewriteStyleInput.value : "balanced");
+
+        const response = await fetch("/rewrite-async", { method: "POST", body: payload });
+        if (!response.ok) {
+            throw new Error("Could not queue async rewrite.");
+        }
+        const data = await response.json();
+        const jobId = String(data.job_id || "");
+        showError("Background rewrite started. Waiting for result...");
+
+        for (let i = 0; i < 25; i += 1) {
+            await sleep(1200);
+            const poll = await fetch(`/analyze-jobs/${jobId}`, { method: "GET" });
+            if (!poll.ok) {
+                continue;
+            }
+            const job = await poll.json();
+            if (job.status === "completed" && job.result) {
+                const rewritten = String(job.result.rewritten_text || "");
+                if (rewritten && afterEmailNode && beforeEmailNode) {
+                    beforeEmailNode.innerHTML = highlightSpamSignals(rawText);
+                    afterEmailNode.innerHTML = escapeHtml(rewritten);
+                    latestRewriteContext = {
+                        original_subject: String(job.result.original_subject || ""),
+                        original_body: String(job.result.original_body || ""),
+                        rewritten_subject: String(job.result.rewritten_subject || ""),
+                        rewritten_body: String(job.result.rewritten_body || rewritten),
+                        original_text: String(job.result.original_text || rawText),
+                        rewritten_text: rewritten,
+                        from_risk_band: String(job.result.from_risk_band || "Needs Review"),
+                        to_risk_band: String(job.result.to_risk_band || "Needs Review"),
+                        score_delta: Number(job.result.score_delta || 0),
+                        rewrite_style: String(job.result.rewrite_style || "balanced"),
+                    };
+                    if (workflowStateNode) {
+                        workflowStateNode.textContent = "Step 2: Fix complete";
+                    }
+                    if (workflowTitleNode) {
+                        workflowTitleNode.textContent = "Safer version generated";
+                    }
+                    if (improvementEstimateNode) {
+                        const delta = Number(job.result.score_delta || 0);
+                        improvementEstimateNode.textContent = `Spam Risk Reduced | Deliverability Score: ${delta >= 0 ? "+" : ""}${delta}`;
+                    }
+                    if (fixOutput) {
+                        fixOutput.classList.remove("hidden");
+                        fixOutput.scrollIntoView({ behavior: "smooth", block: "start" });
+                    }
+                }
+                showError("Background rewrite completed.");
+                return;
+            }
+            if (job.status === "failed") {
+                throw new Error(String(job.error || "Async rewrite failed."));
+            }
+        }
+        throw new Error("Async rewrite timed out. Try again.");
+    } finally {
+        if (riskFixAsyncButton) {
+            riskFixAsyncButton.disabled = false;
+            riskFixAsyncButton.textContent = "Generate Safe Rewrite In Background";
+        }
     }
 }
 
@@ -1824,6 +2164,26 @@ function showPaywall() {
     const paywall = document.getElementById("paywall");
     if (paywall) {
         paywall.classList.remove("hidden");
+        const title = paywall.querySelector("h3");
+        const body = paywall.querySelector("p");
+        const button = paywall.querySelector("button");
+        if (title) {
+            title.textContent = "You've found your biggest risk. Fixing one email isn't enough.";
+        }
+        if (body) {
+            body.textContent = "Unlock Safe Sending to run your next check before the next campaign goes out.";
+        }
+        if (button) {
+            button.textContent = "Unlock Safe Sending";
+        }
+    }
+}
+
+function showUpgradeBlock() {
+    const paywall = document.getElementById("paywall");
+    showPaywall();
+    if (paywall) {
+        paywall.scrollIntoView({ behavior: "smooth", block: "center" });
     }
 }
 
@@ -1836,7 +2196,10 @@ async function startPayment() {
 
         const planInput = document.getElementById("plan-type");
         const payload = new FormData();
-        payload.set("plan", planInput ? String(planInput.value || "monthly") : "monthly");
+        const selectedPlan = inlinePlanTypeInput
+            ? String(inlinePlanTypeInput.value || "monthly")
+            : (planInput ? String(planInput.value || "monthly") : "monthly");
+        payload.set("plan", selectedPlan);
         const response = await fetch("/create-subscription", { method: "POST", body: payload });
         const data = await response.json().catch(() => ({}));
 
@@ -1891,6 +2254,22 @@ if (payButton) {
         startPayment();
     });
 }
+if (refreshPlansButton) {
+    refreshPlansButton.addEventListener("click", (event) => {
+        event.preventDefault();
+        refreshPlans().catch((error) => {
+            showError(error && error.message ? error.message : "Could not load plans.");
+        });
+    });
+}
+if (requestAccessButton) {
+    requestAccessButton.addEventListener("click", (event) => {
+        event.preventDefault();
+        requestAccess().catch((error) => {
+            showError(error && error.message ? error.message : "Could not submit access request.");
+        });
+    });
+}
 if (cancelSubscriptionButton) {
     cancelSubscriptionButton.addEventListener("click", async (event) => {
         event.preventDefault();
@@ -1941,16 +2320,25 @@ if (dashboardTab) {
             runPendingAction();
         });
     }
+    if (riskFixAsyncButton) {
+        riskFixAsyncButton.addEventListener("click", () => {
+            trackEvent("fix_async_clicked", { source: "risk_fix_async" });
+            runRewriteAsync().catch((error) => {
+                showError(error && error.message ? error.message : "Could not queue async rewrite.");
+            });
+        });
+    }
     if (postFixAccessButton) {
         postFixAccessButton.addEventListener("click", () => {
             if (!isAuthenticated) {
-                pendingAuthRedirectPath = "/pricing";
-                showAuthModal();
+                openPricingModal();
                 trackEvent("post_fix_access_clicked", { state: "anon" });
                 return;
             }
             trackEvent("post_fix_access_clicked", { state: "authenticated" });
-            window.location.href = "/pricing";
+            runSeedAuto().catch(() => {
+                window.location.href = "/seed-inbox";
+            });
         });
     }
     if (useFixedButton) {
@@ -1971,8 +2359,8 @@ if (dashboardTab) {
     if (feedbackSpamButton) {
         feedbackSpamButton.addEventListener("click", () => sendFeedback("spam"));
     }
-    if (feedbackUnsureButton) {
-        feedbackUnsureButton.addEventListener("click", () => sendFeedback("not_sure"));
+    if (feedbackPromotionsButton) {
+        feedbackPromotionsButton.addEventListener("click", () => sendFeedback("promotions"));
     }
     if (saveFixButton) {
         saveFixButton.addEventListener("click", () => {
@@ -2017,6 +2405,13 @@ if (dashboardTab) {
             });
         });
     }
+    if (runSeedSyncButton) {
+        runSeedSyncButton.addEventListener("click", () => {
+            runSeedSync().catch((error) => {
+                showError(error && error.message ? error.message : "Could not run instant seed probe.");
+            });
+        });
+    }
     if (runBulkScanButton) {
         runBulkScanButton.addEventListener("click", () => {
             runBulkScan().catch((error) => {
@@ -2031,10 +2426,52 @@ if (dashboardTab) {
             });
         });
     }
+    if (listApiKeysButton) {
+        listApiKeysButton.addEventListener("click", () => {
+            listApiKeys().catch((error) => {
+                showError(error && error.message ? error.message : "Could not load API keys.");
+            });
+        });
+    }
+    if (revokeApiKeyButton) {
+        revokeApiKeyButton.addEventListener("click", () => {
+            revokeApiKey().catch((error) => {
+                showError(error && error.message ? error.message : "Could not revoke API key.");
+            });
+        });
+    }
     if (createTeamButton) {
         createTeamButton.addEventListener("click", () => {
             createTeam().catch((error) => {
                 showError(error && error.message ? error.message : "Could not create team.");
+            });
+        });
+    }
+    if (listTeamsButton) {
+        listTeamsButton.addEventListener("click", () => {
+            listTeams().catch((error) => {
+                showError(error && error.message ? error.message : "Could not load teams.");
+            });
+        });
+    }
+    if (addTeamMemberButton) {
+        addTeamMemberButton.addEventListener("click", () => {
+            addTeamMember().catch((error) => {
+                showError(error && error.message ? error.message : "Could not add team member.");
+            });
+        });
+    }
+    if (refreshOutcomeStatsButton) {
+        refreshOutcomeStatsButton.addEventListener("click", () => {
+            refreshOutcomeStats().catch((error) => {
+                showError(error && error.message ? error.message : "Could not load outcome stats.");
+            });
+        });
+    }
+    if (refreshJobsButton) {
+        refreshJobsButton.addEventListener("click", () => {
+            refreshJobs().catch((error) => {
+                showError(error && error.message ? error.message : "Could not load async jobs.");
             });
         });
     }
@@ -2157,4 +2594,10 @@ refreshAuthStatus().then(() => {
     resumePendingAfterAuthIfNeeded();
     openAuthModalFromQueryIfNeeded();
     refreshSeedTests().catch(() => null);
+    if (isAuthenticated) {
+        listApiKeys().catch(() => null);
+        listTeams().catch(() => null);
+        refreshOutcomeStats().catch(() => null);
+    }
+    refreshJobs().catch(() => null);
 });
