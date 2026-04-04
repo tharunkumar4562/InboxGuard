@@ -169,6 +169,9 @@ const refreshPlansButton = document.getElementById("refresh-plans");
 const plansOutputNode = document.getElementById("plans-output");
 const requestAccessButton = document.getElementById("request-access");
 const accessRequestEmailInput = document.getElementById("access-request-email");
+const liveStatsSummaryNode = document.getElementById("live-stats-summary");
+const liveStatsBreakdownNode = document.getElementById("live-stats-breakdown");
+const liveStatsStatusNode = document.getElementById("live-stats-status");
 
 const loadSteps = [
     "Checking content signals...",
@@ -412,6 +415,49 @@ function refreshToolPaneData(toolKey) {
             setListMessage(jobListNode, msg);
             showError(msg);
         });
+    }
+}
+
+window.igOnToolPaneOpened = (toolKey) => {
+    refreshToolPaneData(toolKey);
+};
+
+async function refreshHomeLiveStats() {
+    if (!liveStatsSummaryNode || !liveStatsBreakdownNode || !liveStatsStatusNode) {
+        return;
+    }
+
+    liveStatsSummaryNode.textContent = "Loading live performance metrics...";
+    liveStatsBreakdownNode.textContent = "Fetching current outcome signals.";
+    liveStatsStatusNode.textContent = "";
+
+    try {
+        const response = await fetch("/outcome-stats", { method: "GET" });
+        if (!response.ok) {
+            const fallback = await response.json().catch(() => ({}));
+            const detail = String(fallback.detail || "").trim();
+            if (detail === "AUTH_REQUIRED") {
+                liveStatsSummaryNode.textContent = "Live metrics available after sign in.";
+                liveStatsBreakdownNode.textContent = "Sign in to load real inbox-rate and benchmark stats from tracked outcomes.";
+                liveStatsStatusNode.textContent = "No fake counters shown.";
+                return;
+            }
+            throw new Error(detail || "Could not load live stats.");
+        }
+
+        const data = await response.json();
+        const samples = Number(data.samples || 0);
+        const inboxRate = Number(data.inbox_rate || 0).toFixed(1);
+        const benchmark = Number(data.benchmark_top_10_score || 85);
+        const bands = Array.isArray(data.score_bands) ? data.score_bands : [];
+
+        liveStatsSummaryNode.textContent = `Tracked outcomes: ${samples} | Inbox rate: ${inboxRate}%`;
+        liveStatsBreakdownNode.textContent = `Current top benchmark: ${benchmark}+ score before scale. Band rows loaded: ${bands.length}.`;
+        liveStatsStatusNode.textContent = "Updates in real time as new feedback is recorded.";
+    } catch (error) {
+        liveStatsSummaryNode.textContent = "Live performance metrics are temporarily unavailable.";
+        liveStatsBreakdownNode.textContent = "Outcome data endpoint did not respond. Try again in a moment.";
+        liveStatsStatusNode.textContent = "No synthetic values are shown.";
     }
 }
 
@@ -997,33 +1043,6 @@ function showHome() {
     setTabFeedback("Choose a tool to get started.");
 }
 
-function forceOpenToolPane(tool) {
-    const allPanes = Array.from(document.querySelectorAll(".tool-pane"));
-    allPanes.forEach((pane) => pane.classList.remove("active"));
-
-    const allButtons = Array.from(document.querySelectorAll(".tool-nav-btn"));
-    allButtons.forEach((button) => button.classList.remove("active"));
-
-    const pane = document.querySelector(`.tool-pane[data-tool-pane="${String(tool)}"]`);
-    const button = document.querySelector(`.tool-nav-btn[data-tool="${String(tool)}"]`);
-    const mainArea = document.querySelector(".main-area");
-
-    if (pane) {
-        pane.classList.add("active");
-        if (mainArea) {
-            mainArea.classList.add("tool-panel-open");
-        }
-        const firstInput = pane.querySelector("input,select,textarea,button");
-        if (firstInput && typeof firstInput.focus === "function") {
-            setTimeout(() => firstInput.focus(), 60);
-        }
-    }
-
-    if (button) {
-        button.classList.add("active");
-    }
-}
-
 function openTool(tool) {
     hideAllViews();
     homeSections.forEach((node) => node.classList.add("hidden"));
@@ -1065,13 +1084,8 @@ function openTool(tool) {
     }
     if (typeof window.igOpenToolPane === "function") {
         window.igOpenToolPane(tool);
-        const openedPane = document.querySelector(`.tool-pane[data-tool-pane="${String(tool)}"].active`);
-        if (!openedPane) {
-            forceOpenToolPane(tool);
-        }
-    } else {
-        forceOpenToolPane(tool);
     }
+    refreshToolPaneData(tool);
     setTabFeedback("Tool panel active.");
 }
 
@@ -1365,7 +1379,7 @@ function renderBiggestRisk(summary, findings) {
 
     if (trustHookNode) {
         const samples = latestLearningProfile && Number(latestLearningProfile.sample_size || 0) > 0
-            ? ` Learned from ${latestLearningProfile.sample_size} recorded outcome(s).`
+            ? ` Model trained on ${latestLearningProfile.sample_size} outcome(s).`
             : "";
         trustHookNode.textContent = `Bulk-pattern check.${samples}`;
     }
@@ -2445,6 +2459,7 @@ async function sendFeedback(outcome) {
             feedbackStatusNode.textContent = message;
         }
         refreshOutcomeStats().catch(() => null);
+        refreshHomeLiveStats().catch(() => null);
         showError(`${message} (${samples} learned outcomes)`);
     } catch (error) {
         showError(error && error.message ? error.message : "Could not save feedback");
@@ -2828,8 +2843,8 @@ async function loadUserTokens() {
 }
 
 async function handleRequestAccess() {
-    const inlineEmail = String(accessRequestEmailInput && accessRequestEmailInput.value ? accessRequestEmailInput.value : "").trim();
-    const email = inlineEmail || window.prompt("Enter your email:");
+    const fromField = accessRequestEmailInput ? String(accessRequestEmailInput.value || "").trim() : "";
+    const email = fromField || String(window.prompt("Enter your email:") || "").trim();
     if (!email) {
         return;
     }
@@ -2843,6 +2858,10 @@ async function handleRequestAccess() {
     if (!response.ok) {
         showError("Could not submit access request.");
         return;
+    }
+
+    if (accessRequestEmailInput) {
+        accessRequestEmailInput.value = "";
     }
 
     alert("Access requested. We'll reach out.");
@@ -3028,7 +3047,7 @@ function wireUiEvents() {
     if (requestAccessButton) {
         requestAccessButton.addEventListener("click", (event) => {
             event.preventDefault();
-            requestAccess().catch((error) => {
+            handleRequestAccess().catch((error) => {
                 showError(error && error.message ? error.message : "Could not submit access request.");
             });
         });
@@ -3310,6 +3329,7 @@ setIdleState();
 showHome();
 refreshAuthStatus().then(() => {
     loadUser().catch(() => null);
+    refreshHomeLiveStats().catch(() => null);
     resumePendingAfterAuthIfNeeded();
     openAuthModalFromQueryIfNeeded();
     refreshSeedTests().catch(() => null);

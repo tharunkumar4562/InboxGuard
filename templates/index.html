@@ -644,7 +644,9 @@ I noticed your recent post and had one short idea to improve reply rates."></tex
 
         <section class="card home-only" id="trust-social-proof" style="margin-top: 12px;">
           <h3>Trusted by teams who send before sunrise</h3>
-          <p class="micro">Tested emails: 12,483 | Avg inbox improvement after fix: +37% (tracked outcomes).</p>
+          <p id="live-stats-summary" class="micro">Live performance metrics load from recent outcomes.</p>
+          <p id="live-stats-breakdown" class="micro">Sign in to view your latest inbox-rate benchmark and sample counts.</p>
+          <p id="live-stats-status" class="micro">Outcome-driven scoring improves as feedback is submitted.</p>
           <p class="micro">"InboxGuard caught what our QA missed and saved a full campaign run."</p>
           <p class="micro">- Founder, B2B outbound team (38K contacts/month)</p>
           <p class="micro">"We now run every campaign through it before touching volume."</p>
@@ -671,7 +673,7 @@ I noticed your recent post and had one short idea to improve reply rates."></tex
           <input id="lead-capture-email" type="email" placeholder="you@company.com" style="padding:10px 12px; border-radius:10px; border:1px solid rgba(148,163,184,0.35); background:#07162e; color:#e2e8f0;" />
           <button id="lead-capture-continue" type="button" class="btn-primary">Continue to scan</button>
         </div>
-        <button id="lead-capture-close" type="button" class="link-action">Not now</button>
+        <button id="lead-capture-close" type="button" class="link-action" onclick="window.igLeadCaptureClose && window.igLeadCaptureClose()">Not now</button>
       </div>
     </div>
 
@@ -680,14 +682,14 @@ I noticed your recent post and had one short idea to improve reply rates."></tex
         <h3 id="auth-modal-title">Continue your scans</h3>
         <p class="micro">You've used your free scans. Continue where you left off.</p>
         <div class="modal-actions">
-          <button id="auth-signin" type="button" class="btn-primary">Continue with Google</button>
+          <button id="auth-signin" type="button" class="btn-primary" onclick="window.igAuthSignIn && window.igAuthSignIn()">Continue with Google</button>
         </div>
         <p class="micro" style="margin-top: 10px;">or continue with email</p>
         <div style="display:grid; gap:8px; margin-top:6px;">
           <input id="auth-email" type="email" placeholder="you@company.com" style="padding:10px 12px; border-radius:10px; border:1px solid rgba(148,163,184,0.35); background:#07162e; color:#e2e8f0;" />
-          <button id="auth-create" type="button" class="btn-secondary">Continue with Email</button>
+          <button id="auth-create" type="button" class="btn-secondary" onclick="window.igAuthCreate && window.igAuthCreate()">Continue with Email</button>
         </div>
-        <button id="auth-close" type="button" class="link-action">Not now</button>
+        <button id="auth-close" type="button" class="link-action" onclick="window.igAuthClose && window.igAuthClose()">Not now</button>
       </div>
     </div>
 
@@ -822,6 +824,6 @@ I noticed your recent post and had one short idea to improve reply rates."></tex
       })();
     </script>
 
-    <script src="/static/js/app.js?v=20260404-wire-fix-3"></script>
+    <script src="/static/js/app.js?v=20260404-modal-fix-1"></script>
   </body>
 </html>
