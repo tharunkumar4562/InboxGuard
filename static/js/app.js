@@ -79,6 +79,34 @@ async function handleRequestAccess() {
   }
 }
 
+// Update token display from API
+async function updateTokenDisplay() {
+  try {
+    const res = await fetch("/auth/status", { credentials: "include" });
+    if (!res.ok) return;
+    
+    const status = await res.json();
+    if (status.authenticated && status.tokens !== undefined) {
+      const tokenCountEl = document.getElementById("token-count");
+      const remainingEl = document.getElementById("remaining-count");
+      
+      if (tokenCountEl) tokenCountEl.textContent = status.tokens;
+      if (remainingEl) remainingEl.textContent = status.tokens;
+      
+      // Show token badge if user has tokens
+      const tokenBadge = document.getElementById("token-badge");
+      if (tokenBadge && status.tokens > 0) {
+        tokenBadge.classList.remove("hidden");
+      }
+    }
+  } catch (error) {
+    console.error("Token display error:", error);
+  }
+}
+
+// Initialize token display on page load
+document.addEventListener("DOMContentLoaded", updateTokenDisplay);
+
 const resultSection = document.getElementById("result");
 const idleNote = document.getElementById("idle-note");
 const scanPanel = document.querySelector(".scan-panel");
@@ -1114,6 +1142,9 @@ function setResultState() {
     if (progressBarNode) {
         progressBarNode.style.width = "100%";
     }
+    
+    // Refresh token count after scan completes
+    updateTokenDisplay();
 }
 
 function startRealtimeScanSteps() {
