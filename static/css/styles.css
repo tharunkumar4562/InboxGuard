@@ -402,20 +402,21 @@ nav {
     position: fixed;
     inset: 0;
     z-index: 12000;
-    background: rgba(2, 6, 23, 0.88);
+    background: rgba(2, 6, 23, 0.62);
     display: flex;
     align-items: center;
     justify-content: center;
-    backdrop-filter: blur(4px);
+    backdrop-filter: blur(2px);
 }
 
 .fullscreen-decision-card {
     text-align: center;
     border: 1px solid rgba(148, 163, 184, 0.36);
     border-radius: 18px;
-    padding: 28px 34px;
+    padding: 24px 30px;
     background: linear-gradient(145deg, rgba(15, 23, 42, 0.96), rgba(30, 41, 59, 0.92));
-    box-shadow: 0 24px 60px rgba(2, 6, 23, 0.45);
+    box-shadow: 0 16px 40px rgba(2, 6, 23, 0.35);
+    animation: decisionPop 180ms ease;
 }
 
 .fullscreen-label {
@@ -433,9 +434,28 @@ nav {
     letter-spacing: 0.01em;
 }
 
+.fullscreen-decision.decision-high #fs-decision {
+    color: #f87171;
+}
+
+.fullscreen-decision.decision-safe #fs-decision {
+    color: #4ade80;
+}
+
 #fs-sub {
     margin: 0;
     color: #cbd5e1;
+}
+
+@keyframes decisionPop {
+    from {
+        opacity: 0;
+        transform: scale(0.96);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
 }
 
 @media (max-width: 1200px) {

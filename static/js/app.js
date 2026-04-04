@@ -32,6 +32,7 @@ const progressiveStepNodes = Array.from(document.querySelectorAll(".cc-step"));
 const fullscreenDecision = document.getElementById("fullscreen-decision");
 const fullscreenDecisionTitle = document.getElementById("fs-decision");
 const fullscreenDecisionSub = document.getElementById("fs-sub");
+let fullscreenDecisionTimer = null;
 
 const statusRiskBandNode = document.getElementById("status-risk-band");
 const statusRiskCardNode = document.getElementById("status-risk-card");
@@ -729,15 +730,29 @@ function showFullscreenDecisionMoment(decisionLabel, summary, prediction) {
         return;
     }
 
+    // Neutral decisions are already visible in-panel; reserve fullscreen for high-impact outcomes.
+    if (decisionLabel === "TEST FIRST") {
+        fullscreenDecision.classList.add("hidden");
+        return;
+    }
+
     const probability = Number(prediction && prediction.inbox_probability ? prediction.inbox_probability : 0);
     const primaryIssue = primaryIssue(summary || {}, latestFindings || []);
     fullscreenDecisionTitle.textContent = decisionLabel;
     fullscreenDecisionSub.textContent = `${primaryIssue} | Inbox probability: ${probability.toFixed(1)}%`;
 
+    fullscreenDecision.classList.remove("decision-high", "decision-safe");
+    fullscreenDecision.classList.add(decisionLabel === "DO NOT SEND" ? "decision-high" : "decision-safe");
+
     fullscreenDecision.classList.remove("hidden");
-    setTimeout(() => {
+
+    if (fullscreenDecisionTimer) {
+        clearTimeout(fullscreenDecisionTimer);
+    }
+
+    fullscreenDecisionTimer = setTimeout(() => {
         fullscreenDecision.classList.add("hidden");
-    }, 1500);
+    }, 900);
 }
 
 function setImpactBadge(node, impact) {
