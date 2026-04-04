@@ -671,7 +671,7 @@ I noticed your recent post and had one short idea to improve reply rates."></tex
         <h3 id="auth-modal-title">Continue your scans</h3>
         <p class="micro">You've used your free scans. Continue where you left off.</p>
         <div class="modal-actions">
-          <a id="auth-signin" class="btn-primary" href="/auth/google/login?next=/%3Fresume%3D1" style="display:inline-flex;align-items:center;justify-content:center;text-decoration:none;">Continue with Google</a>
+          <button id="auth-signin" type="button" class="btn-primary" onclick="window.igAuthSignIn && window.igAuthSignIn()">Continue with Google</button>
         </div>
         <p class="micro" style="margin-top: 10px;">or continue with email</p>
         <div style="display:grid; gap:8px; margin-top:6px;">
