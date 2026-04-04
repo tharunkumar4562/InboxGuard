@@ -13,6 +13,8 @@ window.fetch = (input, init = {}) => {
 const resultSection = document.getElementById("result");
 const idleNote = document.getElementById("idle-note");
 const scanPanel = document.getElementById("scan-panel");
+const homeView = document.getElementById("home");
+const toolPanel = document.getElementById("tool-panel");
 const homeSections = Array.from(document.querySelectorAll(".home-only"));
 const scanSections = Array.from(document.querySelectorAll(".scan-only"));
 const tabFeedbackNode = document.getElementById("tab-feedback");
@@ -183,6 +185,10 @@ let latestLearningProfile = null;
 let hasScanResult = false;
 let pendingAction = null;
 let isAuthenticated = false;
+let userState = {
+    tokens: 0,
+    plan: "free",
+};
 let anonymousScansUsed = Number(localStorage.getItem("ig_anon_scans_used") || "0");
 let anonymousScansLimit = Number(localStorage.getItem("ig_anon_scans_limit") || "3");
 let userScansUsed = 0;
@@ -950,16 +956,65 @@ window.igAuthClose = () => handleAuthAction("close");
 window.igLeadCaptureClose = () => hideLeadCaptureModal();
 
 function activateTab(tab) {
-    if (!dashboardTab || !threatScanTab) {
+    if (tab === "threat-scan") {
+        openTool("scan");
         return;
     }
+    goHome();
+}
 
-    dashboardTab.classList.remove("active");
-    threatScanTab.classList.remove("active");
+window.activateTab = activateTab;
 
-    if (tab === "threat-scan") {
-        threatScanTab.classList.add("active");
-        homeSections.forEach((node) => node.classList.add("hidden"));
+function hideAllViews() {
+    if (homeView) {
+        homeView.classList.add("hidden");
+    }
+    if (toolPanel) {
+        toolPanel.classList.add("hidden");
+    }
+}
+
+function showHome() {
+    hideAllViews();
+    if (typeof window.closeTool === "function") {
+        window.closeTool();
+    }
+    if (homeView) {
+        homeView.classList.remove("hidden");
+    }
+    homeSections.forEach((node) => node.classList.remove("hidden"));
+    scanSections.forEach((node) => node.classList.add("hidden"));
+    if (scanPanel) {
+        scanPanel.classList.remove("focused");
+        scanPanel.classList.add("hidden");
+    }
+    if (dashboardTab) {
+        dashboardTab.classList.add("active");
+    }
+    if (threatScanTab) {
+        threatScanTab.classList.remove("active");
+    }
+    setTabFeedback("Choose a tool to get started.");
+}
+
+function openTool(tool) {
+    hideAllViews();
+    homeSections.forEach((node) => node.classList.add("hidden"));
+    if (toolPanel) {
+        toolPanel.classList.remove("hidden");
+    }
+
+    if (dashboardTab) {
+        dashboardTab.classList.remove("active");
+    }
+
+    if (tool === "scan" || tool === "threat-scan") {
+        if (typeof window.closeTool === "function") {
+            window.closeTool();
+        }
+        if (threatScanTab) {
+            threatScanTab.classList.add("active");
+        }
         scanSections.forEach((node) => node.classList.remove("hidden"));
         if (scanPanel) {
             scanPanel.classList.add("focused");
@@ -967,22 +1022,32 @@ function activateTab(tab) {
             scanPanel.scrollIntoView({ behavior: "smooth", block: "start" });
         }
         if (rawEmailInput) {
-            rawEmailInput.focus();
+            setTimeout(() => rawEmailInput.focus(), 60);
         }
         setTabFeedback("Scan mode active. Paste your email and click Check Before Sending.");
-    } else {
-        dashboardTab.classList.add("active");
-        homeSections.forEach((node) => node.classList.remove("hidden"));
-        scanSections.forEach((node) => node.classList.add("hidden"));
-        if (scanPanel) {
-            scanPanel.classList.remove("focused");
-            scanPanel.classList.add("hidden");
-        }
-        setTabFeedback("Choose a tool to get started.");
+        return;
     }
+
+    if (threatScanTab) {
+        threatScanTab.classList.remove("active");
+    }
+    scanSections.forEach((node) => node.classList.add("hidden"));
+    if (scanPanel) {
+        scanPanel.classList.remove("focused");
+        scanPanel.classList.add("hidden");
+    }
+    if (typeof window.igOpenToolPane === "function") {
+        window.igOpenToolPane(tool);
+    }
+    setTabFeedback("Tool panel active.");
 }
 
-window.activateTab = activateTab;
+function goHome() {
+    showHome();
+}
+
+window.openTool = openTool;
+window.goHome = goHome;
 
 function setIdleState() {
     hasScanResult = false;
@@ -2675,16 +2740,33 @@ window.currentUser = isAuthenticated;
 
 function updateTokenMessaging(tokens) {
     const safeTokens = Math.max(0, Number(tokens || 0));
+    userState.tokens = safeTokens;
     if (tokenCostHintNode) {
         tokenCostHintNode.textContent = `This will cost 1 credit. You have ${safeTokens} left.`;
     }
 }
 
+async function loadUser() {
+    try {
+        const response = await fetch("/auth/me", { method: "GET", credentials: "include" });
+        if (!response.ok) {
+            return;
+        }
+        const user = await response.json();
+        userState.plan = String(user.plan || (user.pro ? "pro" : "free"));
+        if (typeof user.tokens === "number") {
+            userState.tokens = Number(user.tokens);
+            updateTokenMessaging(userState.tokens);
+        }
+    } catch (error) {
+        // Keep UI usable even if auth endpoint fails.
+    }
+}
+
 async function loadUserTokens() {
     try {
-        const tokenBadge = document.getElementById("token-badge");
+        const tokenBadge = document.getElementById("token-display");
         const tokenCount = document.getElementById("token-count");
-        const tokenLabel = document.getElementById("token-label");
 
         if (!isAuthenticated) {
             if (tokenBadge) {
@@ -2703,35 +2785,12 @@ async function loadUserTokens() {
         if (tokenBadge && tokenCount) {
             tokenBadge.classList.remove("hidden");
             tokenCount.textContent = String(tokens);
-            if (tokenLabel) {
-                tokenLabel.textContent = tokens === 1 ? "credit" : "credits";
-            }
         }
 
         updateTokenMessaging(tokens);
     } catch (error) {
         // Keep UI responsive even if token endpoint is unavailable.
     }
-}
-
-async function handleUnlock() {
-    const res = await fetch("/auth/me", { method: "GET", credentials: "include" });
-    if (!res.ok) {
-        showAuthModal();
-        return;
-    }
-
-    const upgrade = await fetch("/upgrade-test", {
-        method: "POST",
-        credentials: "include",
-    });
-    if (!upgrade.ok) {
-        showError("Could not upgrade account. Try again.");
-        return;
-    }
-
-    alert("Upgraded to Pro 🚀");
-    window.location.reload();
 }
 
 async function handleRequestAccess() {
@@ -2777,11 +2836,13 @@ function handleGetAccess() {
 }
 
 function openToolPane(toolKey) {
-    if (typeof window.igOpenToolPane === "function") {
-        window.igOpenToolPane(toolKey);
-    } else if (typeof window.openTool === "function") {
+    if (typeof window.openTool === "function") {
         window.openTool(toolKey);
     }
+}
+
+function showScanCost() {
+    alert(`This will cost 1 credit. You have ${Math.max(0, Number(userState.tokens || 0))}`);
 }
 
 function canUserScan() {
@@ -2816,10 +2877,10 @@ function showPaywall() {
         title.textContent = "You've found your biggest risk. Fixing one email isn't enough.";
     }
     if (body) {
-        body.textContent = "Unlock Safe Sending to run your next check before the next campaign goes out.";
+        body.textContent = "Get Access to run your next check before the next campaign goes out.";
     }
     if (button) {
-        button.textContent = "Unlock Safe Sending";
+        button.textContent = "Get Access";
     }
 }
 
@@ -2892,7 +2953,8 @@ async function startPayment() {
 
 window.openPricingModal = openPricingModal;
 window.closePricingModal = closePricingModal;
-window.handleUnlock = handleUnlock;
+window.handleGetAccess = handleGetAccess;
+window.handleUnlock = handleGetAccess;
 window.handleRequestAccess = handleRequestAccess;
 window.openToolPane = openToolPane;
 
@@ -3031,9 +3093,7 @@ function wireUiEvents() {
     if (accessButton) {
         accessButton.addEventListener("click", (event) => {
             event.preventDefault();
-            handleUnlock().catch((error) => {
-                showError(error && error.message ? error.message : "Could not unlock account.");
-            });
+            handleGetAccess();
         });
     }
 
@@ -3174,6 +3234,7 @@ function wireUiEvents() {
                 showAuthModal();
                 return;
             }
+            showScanCost();
             runPendingAction();
         });
     }
@@ -3211,8 +3272,9 @@ setupNextAction();
 setupParallax();
 
 setIdleState();
-activateTab("dashboard");
+showHome();
 refreshAuthStatus().then(() => {
+    loadUser().catch(() => null);
     resumePendingAfterAuthIfNeeded();
     openAuthModalFromQueryIfNeeded();
     refreshSeedTests().catch(() => null);
