@@ -997,6 +997,28 @@ function showHome() {
     setTabFeedback("Choose a tool to get started.");
 }
 
+function forceOpenToolPane(tool) {
+    const allPanes = Array.from(document.querySelectorAll(".tool-pane"));
+    allPanes.forEach((pane) => pane.classList.remove("active"));
+
+    const allButtons = Array.from(document.querySelectorAll(".tool-nav-btn"));
+    allButtons.forEach((button) => button.classList.remove("active"));
+
+    const pane = document.querySelector(`.tool-pane[data-tool-pane="${String(tool)}"]`);
+    if (pane) {
+        pane.classList.add("active");
+        const firstInput = pane.querySelector("input,select,textarea,button");
+        if (firstInput && typeof firstInput.focus === "function") {
+            setTimeout(() => firstInput.focus(), 60);
+        }
+    }
+
+    const button = document.querySelector(`.tool-nav-btn[data-tool="${String(tool)}"]`);
+    if (button) {
+        button.classList.add("active");
+    }
+}
+
 function openTool(tool) {
     hideAllViews();
     homeSections.forEach((node) => node.classList.add("hidden"));
@@ -1038,6 +1060,12 @@ function openTool(tool) {
     }
     if (typeof window.igOpenToolPane === "function") {
         window.igOpenToolPane(tool);
+        const openedPane = document.querySelector(`.tool-pane[data-tool-pane="${String(tool)}"].active`);
+        if (!openedPane) {
+            forceOpenToolPane(tool);
+        }
+    } else {
+        forceOpenToolPane(tool);
     }
     setTabFeedback("Tool panel active.");
 }
