@@ -54,7 +54,19 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 SITE_URL = os.getenv("INBOXGUARD_SITE_URL", "https://inboxguard.me")
 ADMIN_TOKEN = os.getenv("INBOXGUARD_ADMIN_TOKEN", "")
+# ⚠️ SESSION_SECRET MUST BE LOCKED IN RAILWAY
+# Required variables for production:
+#   INBOXGUARD_SESSION_SECRET = <super_long_random_string>
+#   INBOXGUARD_SESSION_HTTPS_ONLY = 1 (for production)
+# Never change SESSION_SECRET after deployment or all users get logged out
 SESSION_SECRET = os.getenv("INBOXGUARD_SESSION_SECRET", "change-me-in-production")
+if SESSION_SECRET == "change-me-in-production":
+    import warnings
+    warnings.warn(
+        "⚠️ SESSION_SECRET is using default value. Users will logout on every deployment. "
+        "Set INBOXGUARD_SESSION_SECRET in Railway environment variables immediately.",
+        RuntimeWarning
+    )
 SESSION_HTTPS_ONLY = os.getenv("INBOXGUARD_SESSION_HTTPS_ONLY", "0").strip().lower() in {"1", "true", "yes"}
 AUTH_DB_FILE = BASE_DIR / "data" / "auth.db"
 ANON_SCAN_LIMIT = int(os.getenv("INBOXGUARD_ANON_SCAN_LIMIT", "3"))
@@ -65,11 +77,19 @@ GOOGLE_CLIENT_SECRET = os.getenv("INBOXGUARD_GOOGLE_CLIENT_SECRET", os.getenv("G
 RAZORPAY_KEY = os.getenv("INBOXGUARD_RAZORPAY_KEY", os.getenv("RAZORPAY_KEY", "")).strip()
 RAZORPAY_SECRET = os.getenv("INBOXGUARD_RAZORPAY_SECRET", os.getenv("RAZORPAY_SECRET", "")).strip()
 RAZORPAY_WEBHOOK_SECRET = os.getenv("INBOXGUARD_RAZORPAY_WEBHOOK_SECRET", os.getenv("RAZORPAY_WEBHOOK_SECRET", "")).strip()
-RAZORPAY_AMOUNT_INR = int(os.getenv("INBOXGUARD_RAZORPAY_AMOUNT_INR", "1200"))
-RAZORPAY_DISPLAY_PRICE_USD = os.getenv("INBOXGUARD_RAZORPAY_DISPLAY_PRICE_USD", "$12").strip()
+
+# ⚠️ RAZORPAY PLAN IDS (FROM YOUR RAZORPAY DASHBOARD)
+# After creating plans in Razorpay dashboard, set these in Railway:
+#   INBOXGUARD_RAZORPAY_PLAN_ID = "plan_YOUR_MONTHLY_PLAN_ID"
+#   INBOXGUARD_RAZORPAY_ANNUAL_PLAN_ID = "plan_YOUR_ANNUAL_PLAN_ID"
+# Without these, /create-subscription will return "subscription not configured"
+# Get plan IDs from: Dashboard → Plans → Copy Plan ID
 RAZORPAY_PLAN_ID = os.getenv("INBOXGUARD_RAZORPAY_PLAN_ID", os.getenv("RAZORPAY_PLAN_ID", "")).strip()
 RAZORPAY_ANNUAL_PLAN_ID = os.getenv("INBOXGUARD_RAZORPAY_ANNUAL_PLAN_ID", os.getenv("RAZORPAY_ANNUAL_PLAN_ID", "")).strip()
 RAZORPAY_TRIAL_PLAN_ID = os.getenv("INBOXGUARD_RAZORPAY_TRIAL_PLAN_ID", os.getenv("RAZORPAY_TRIAL_PLAN_ID", "")).strip()
+
+RAZORPAY_AMOUNT_INR = int(os.getenv("INBOXGUARD_RAZORPAY_AMOUNT_INR", "1200"))
+RAZORPAY_DISPLAY_PRICE_USD = os.getenv("INBOXGUARD_RAZORPAY_DISPLAY_PRICE_USD", "$12").strip()
 TRIAL_DAYS = int(os.getenv("INBOXGUARD_TRIAL_DAYS", "7"))
 PAST_DUE_GRACE_DAYS = int(os.getenv("INBOXGUARD_PAST_DUE_GRACE_DAYS", "3"))
 GOOGLE_VERIFICATION_FILE = "googleab4b33a28d8dfb88.html"
@@ -133,7 +153,15 @@ LONG_TAIL_PAGES = [
 ]
 LONG_TAIL_BY_SLUG = {item["slug"]: item for item in LONG_TAIL_PAGES}
 
-app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET, same_site="lax", https_only=SESSION_HTTPS_ONLY)
+# Configure SessionMiddleware with secure defaults for production
+# Railway runs behind reverse proxy → cookies need proper HTTPS signaling
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=SESSION_SECRET,
+    same_site="lax",
+    https_only=SESSION_HTTPS_ONLY,
+    max_age=86400 * 30,  # 30 days: sessions persist across deployments
+)
 
 oauth = OAuth()
 GOOGLE_AUTH_CONFIGURED = bool(GOOGLE_OAUTH_ENABLED and GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET)
@@ -1953,6 +1981,9 @@ def _avatar_url_for_email(email: str) -> str:
 
 
 def _set_session_user(request: Request, user_id: int, email: str, name: str = "", picture: str = "") -> None:
+    # ⚠️ CRITICAL: Set permanent=True so session persists across deployments
+    # This is required because Railway container restarts wipe memory-based sessions
+    request.session["_permanent"] = True
     request.session["user_id"] = user_id
     request.session["user_email"] = email
     request.session["user_name"] = name.strip() or _display_name_from_email(email)
