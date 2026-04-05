@@ -855,10 +855,6 @@ function resumePendingAfterAuthIfNeeded() {
 function openAuthModalFromQueryIfNeeded() {
     const params = new URLSearchParams(window.location.search);
     const shouldOpen = params.get("auth") === "1";
-    const authError = String(params.get("auth_error") || "").trim();
-    if (authError === "google_oauth_failed") {
-        showError("Google login failed. Try again or use email sign-in.");
-    }
     if (!shouldOpen) {
         return;
     }
@@ -2962,9 +2958,8 @@ function showUpgradeBlock() {
 async function startPayment() {
     try {
         await refreshAuthStatus();
-
         if (!isAuthenticated) {
-            pendingAuthRedirectPath = "/pricing";
+            showError("Session expired. Please sign in again.");
             showAuthModal();
             return;
         }
@@ -2980,21 +2975,14 @@ async function startPayment() {
         });
         const data = await response.json().catch(() => ({}));
 
-        if (response.status === 401) {
-            pendingAuthRedirectPath = "/pricing";
-            showError("Session expired. Please sign in again.");
-            showAuthModal();
-            return;
-        }
-
         if (!response.ok || !data.success) {
-            if (response.status === 503 && String(data.detail || "").toLowerCase() === "subscription not configured") {
-                const missing = Array.isArray(data.missing) ? data.missing.filter(Boolean).join(", ") : "";
-                if (missing) {
-                    showError(`Subscription not configured: missing ${missing}`);
-                } else {
-                    showError("Subscription not configured. Set Razorpay keys and plan IDs.");
-                }
+            if (response.status === 401 || String(data.detail || "").toLowerCase() === "not authenticated") {
+                showError("Not authenticated. Please sign in and try again.");
+                showAuthModal();
+                return;
+            }
+            if (response.status === 503 && Array.isArray(data.missing) && data.missing.length > 0) {
+                showError(`Subscription not configured: ${data.missing.join(", ")}`);
                 return;
             }
             showError(data.detail || "Payment system not configured. Please try again later.");
