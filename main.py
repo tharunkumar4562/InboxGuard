@@ -28,6 +28,7 @@ from pydantic import BaseModel
 from starlette.middleware.sessions import SessionMiddleware
 from jinja2 import TemplateNotFound, TemplateError
 from authlib.integrations.starlette_client import OAuth
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from analyzer import analyze_email
 from analytics import get_dashboard_data, track_event
@@ -54,20 +55,11 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 SITE_URL = os.getenv("INBOXGUARD_SITE_URL", "https://inboxguard.me")
 ADMIN_TOKEN = os.getenv("INBOXGUARD_ADMIN_TOKEN", "")
-# ⚠️ SESSION_SECRET MUST BE LOCKED IN RAILWAY
-# Required variables for production:
-#   INBOXGUARD_SESSION_SECRET = <super_long_random_string>
-#   INBOXGUARD_SESSION_HTTPS_ONLY = 1 (for production)
-# Never change SESSION_SECRET after deployment or all users get logged out
 SESSION_SECRET = os.getenv("INBOXGUARD_SESSION_SECRET", "change-me-in-production")
-if SESSION_SECRET == "change-me-in-production":
-    import warnings
-    warnings.warn(
-        "⚠️ SESSION_SECRET is using default value. Users will logout on every deployment. "
-        "Set INBOXGUARD_SESSION_SECRET in Railway environment variables immediately.",
-        RuntimeWarning
-    )
-SESSION_HTTPS_ONLY = os.getenv("INBOXGUARD_SESSION_HTTPS_ONLY", "0").strip().lower() in {"1", "true", "yes"}
+SESSION_COOKIE_MAX_AGE = int(os.getenv("INBOXGUARD_SESSION_COOKIE_MAX_AGE", str(60 * 60 * 24 * 30)))
+SESSION_HTTPS_ONLY_DEFAULT = "1" if os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RAILWAY_STATIC_URL") else "0"
+SESSION_HTTPS_ONLY = os.getenv("INBOXGUARD_SESSION_HTTPS_ONLY", SESSION_HTTPS_ONLY_DEFAULT).strip().lower() in {"1", "true", "yes"}
+PROXY_TRUSTED_HOSTS = os.getenv("INBOXGUARD_PROXY_TRUSTED_HOSTS", "*").strip() or "*"
 AUTH_DB_FILE = BASE_DIR / "data" / "auth.db"
 ANON_SCAN_LIMIT = int(os.getenv("INBOXGUARD_ANON_SCAN_LIMIT", "3"))
 FREE_USER_SCAN_LIMIT = int(os.getenv("INBOXGUARD_FREE_USER_SCAN_LIMIT", "50"))
@@ -77,19 +69,11 @@ GOOGLE_CLIENT_SECRET = os.getenv("INBOXGUARD_GOOGLE_CLIENT_SECRET", os.getenv("G
 RAZORPAY_KEY = os.getenv("INBOXGUARD_RAZORPAY_KEY", os.getenv("RAZORPAY_KEY", "")).strip()
 RAZORPAY_SECRET = os.getenv("INBOXGUARD_RAZORPAY_SECRET", os.getenv("RAZORPAY_SECRET", "")).strip()
 RAZORPAY_WEBHOOK_SECRET = os.getenv("INBOXGUARD_RAZORPAY_WEBHOOK_SECRET", os.getenv("RAZORPAY_WEBHOOK_SECRET", "")).strip()
-
-# ⚠️ RAZORPAY PLAN IDS (FROM YOUR RAZORPAY DASHBOARD)
-# After creating plans in Razorpay dashboard, set these in Railway:
-#   INBOXGUARD_RAZORPAY_PLAN_ID = "plan_YOUR_MONTHLY_PLAN_ID"
-#   INBOXGUARD_RAZORPAY_ANNUAL_PLAN_ID = "plan_YOUR_ANNUAL_PLAN_ID"
-# Without these, /create-subscription will return "subscription not configured"
-# Get plan IDs from: Dashboard → Plans → Copy Plan ID
+RAZORPAY_AMOUNT_INR = int(os.getenv("INBOXGUARD_RAZORPAY_AMOUNT_INR", "1200"))
+RAZORPAY_DISPLAY_PRICE_USD = os.getenv("INBOXGUARD_RAZORPAY_DISPLAY_PRICE_USD", "$12").strip()
 RAZORPAY_PLAN_ID = os.getenv("INBOXGUARD_RAZORPAY_PLAN_ID", os.getenv("RAZORPAY_PLAN_ID", "")).strip()
 RAZORPAY_ANNUAL_PLAN_ID = os.getenv("INBOXGUARD_RAZORPAY_ANNUAL_PLAN_ID", os.getenv("RAZORPAY_ANNUAL_PLAN_ID", "")).strip()
 RAZORPAY_TRIAL_PLAN_ID = os.getenv("INBOXGUARD_RAZORPAY_TRIAL_PLAN_ID", os.getenv("RAZORPAY_TRIAL_PLAN_ID", "")).strip()
-
-RAZORPAY_AMOUNT_INR = int(os.getenv("INBOXGUARD_RAZORPAY_AMOUNT_INR", "1200"))
-RAZORPAY_DISPLAY_PRICE_USD = os.getenv("INBOXGUARD_RAZORPAY_DISPLAY_PRICE_USD", "$12").strip()
 TRIAL_DAYS = int(os.getenv("INBOXGUARD_TRIAL_DAYS", "7"))
 PAST_DUE_GRACE_DAYS = int(os.getenv("INBOXGUARD_PAST_DUE_GRACE_DAYS", "3"))
 GOOGLE_VERIFICATION_FILE = "googleab4b33a28d8dfb88.html"
@@ -153,25 +137,13 @@ LONG_TAIL_PAGES = [
 ]
 LONG_TAIL_BY_SLUG = {item["slug"]: item for item in LONG_TAIL_PAGES}
 
-# ⚠️ STEP 4: Fix Railway Proxy Issue (CRITICAL)
-# Railway runs behind reverse proxy → FastAPI needs to trust X-Forwarded-* headers
-from starlette.middleware import Middleware
-from starlette.middleware.trustedhost import TrustedHostMiddleware
-
-# Add TrustedHost middleware to allow reverse proxy headers
-app.add_middleware(
-    TrustedHostMiddleware,
-    allowed_hosts=["*"],  # Railway handles routing; trust all
-)
-
-# Configure SessionMiddleware with secure defaults for production
-# Railway runs behind reverse proxy → cookies need proper HTTPS signaling
+app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=PROXY_TRUSTED_HOSTS)
 app.add_middleware(
     SessionMiddleware,
     secret_key=SESSION_SECRET,
     same_site="lax",
     https_only=SESSION_HTTPS_ONLY,
-    max_age=86400 * 30,  # 30 days: sessions persist across deployments
+    max_age=SESSION_COOKIE_MAX_AGE,
 )
 
 oauth = OAuth()
@@ -1992,9 +1964,6 @@ def _avatar_url_for_email(email: str) -> str:
 
 
 def _set_session_user(request: Request, user_id: int, email: str, name: str = "", picture: str = "") -> None:
-    # ⚠️ CRITICAL: Set permanent=True so session persists across deployments
-    # This is required because Railway container restarts wipe memory-based sessions
-    request.session["_permanent"] = True
     request.session["user_id"] = user_id
     request.session["user_email"] = email
     request.session["user_name"] = name.strip() or _display_name_from_email(email)
@@ -2114,8 +2083,8 @@ def home(request: Request):
         request,
         "index.html",
         {
-            "page_title": "InboxGuard | Last check before you hit send.",
-            "meta_description": "Know if your email will land in inbox before sending. Fix risky drafts before you hit send and protect your domain.",
+            "page_title": "InboxGuard | Email Spam Checker and Deliverability Guard",
+            "meta_description": "Check inbox placement, spam risk, SPF, DKIM, and DMARC before you send. Fix risky drafts and protect your domain.",
             "canonical_url": f"{SITE_URL}/",
             "focus_query": "why did my email go to spam",
         },
@@ -3172,8 +3141,8 @@ def programmatic_page(request: Request, slug: str):
             request,
             "index.html",
             {
-                "page_title": "Email Deliverability Audit | InboxGuard",
-                "meta_description": "Run a fast email deliverability audit before sending.",
+                "page_title": "Email Deliverability Audit | Spam Checker | InboxGuard",
+                "meta_description": "Run a fast email spam check and deliverability audit before sending.",
                 "canonical_url": f"{SITE_URL}/",
                 "focus_query": "email deliverability audit",
             },
@@ -3182,10 +3151,10 @@ def programmatic_page(request: Request, slug: str):
 
     track_event("page_view", {"page": f"p/{slug}"})
 
-    title = f"{item['query']} | InboxGuard"
+    title = f"{item['query']} | Email Spam Checker | InboxGuard"
     description = (
         f"{item['provider']} users: diagnose {item['problem']} with SPF/DKIM/DMARC checks, "
-        "header-alignment analysis, and copy risk diagnostics before you send."
+        "header-alignment analysis, copy risk diagnostics, and deliverability fixes before you send."
     )
 
     return render_template_safe(

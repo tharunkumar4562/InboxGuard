@@ -12,19 +12,20 @@
     </script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>{{ page_title or "InboxGuard | Fix risky emails before you send" }}</title>
-    <meta name="description" content="{{ meta_description or 'InboxGuard detects deliverability threats before email send.' }}" />
+    <title>{{ page_title or "InboxGuard | Email Spam Checker and Deliverability Guard" }}</title>
+    <meta name="description" content="{{ meta_description or 'InboxGuard checks inbox placement, spam risk, SPF, DKIM, and DMARC before you send.' }}" />
     <meta name="application-name" content="InboxGuard" />
     <meta name="robots" content="index,follow,max-image-preview:large" />
+    <meta name="keywords" content="email spam checker, email deliverability, inbox placement, cold email checker, SPF DKIM DMARC, spam score analyzer, email risk checker" />
     <link rel="canonical" href="{{ canonical_url or 'https://inboxguard.me/' }}" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="InboxGuard" />
-    <meta property="og:title" content="{{ page_title or 'InboxGuard | Fix risky emails before you send' }}" />
+    <meta property="og:title" content="{{ page_title or 'InboxGuard | Email Spam Checker and Deliverability Guard' }}" />
     <meta property="og:description" content="{{ meta_description or 'Find out why emails that look fine still land in spam, then fix them before sending.' }}" />
     <meta property="og:url" content="{{ canonical_url or 'https://inboxguard.me/' }}" />
     <meta property="og:image" content="https://inboxguard.me/static/logo.svg" />
-    <meta name="twitter:card" content="summary" />
-    <meta name="twitter:title" content="{{ page_title or 'InboxGuard | Fix risky emails before you send' }}" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="{{ page_title or 'InboxGuard | Email Spam Checker and Deliverability Guard' }}" />
     <meta name="twitter:description" content="{{ meta_description or 'Find out why emails that look fine still land in spam, then fix them before sending.' }}" />
     <meta name="twitter:image" content="https://inboxguard.me/static/logo.svg" />
     <link rel="icon" href="/static/favicon-48.png" type="image/png" sizes="48x48" />
@@ -54,6 +55,15 @@
             "target": "https://inboxguard.me/?q={search_term_string}",
             "query-input": "required name=search_term_string"
           }
+        },
+        {
+          "@context": "https://schema.org",
+          "@type": "WebApplication",
+          "name": "InboxGuard",
+          "applicationCategory": "BusinessApplication",
+          "operatingSystem": "Web",
+          "url": "https://inboxguard.me",
+          "description": "Email spam checker and deliverability guard for cold outreach and campaign review."
         }
       ]
     </script>
@@ -177,91 +187,6 @@
           <h3>Need unlimited scans and team workflows?</h3>
           <p class="micro">Upgrade when you are ready. Keep your domain safe before every campaign launch.</p>
           <button type="button" class="btn-primary" onclick="handleGetAccess()">Get Access</button>
-        </section>
-
-        <!-- SEO Content Sections -->
-        <section class="card home-only" style="margin-top: 20px;">
-          <h2 style="font-size: 24px; margin-bottom: 16px;">Why Cold Emails Land in Spam</h2>
-          <p style="line-height: 1.6; margin-bottom: 12px;">
-            90% of cold emails fail because of domain and infrastructure issues, not copy. Even perfectly written emails get blocked when:
-          </p>
-          <ul style="margin-left: 20px; line-height: 1.8;">
-            <li><strong>SPF/DKIM/DMARC not configured</strong> → Email providers can't verify your identity</li>
-            <li><strong>Low domain reputation</strong> → Your domain is on blocklists</li>
-            <li><strong>Wrong sender infrastructure</strong> → Sending from shared IP pools without reputation</li>
-            <li><strong>Content red flags</strong> → Accidental spam patterns in subject or body</li>
-            <li><strong>Volume without warm-up</strong> → Sending 500 emails Day 1 = instant spam folder</li>
-          </ul>
-          <p style="margin-top: 16px;">
-            InboxGuard catches all of these before you hit send. Fix them once, then scale without risk.
-          </p>
-        </section>
-
-        <section class="card home-only" style="margin-top: 20px;">
-          <h2 style="font-size: 24px; margin-bottom: 16px;">How InboxGuard Works</h2>
-          <ol style="margin-left: 20px; line-height: 1.8;">
-            <li><strong>Scan your email</strong> → Paste the exact subject + body you plan to send</li>
-            <li><strong>Get instant feedback</strong> → See spam risk score + exact issues found</li>
-            <li><strong>Fix before sending</strong> → Follow ranked recommendations or get rewrites</li>
-            <li><strong>Send with confidence</strong> → Know it will land in inbox</li>
-          </ol>
-        </section>
-
-        <section class="card home-only" style="margin-top: 20px;">
-          <h2 style="font-size: 24px; margin-bottom: 16px;">SPF, DKIM, DMARC Explained</h2>
-          <p style="margin-bottom: 12px;">
-            These three email authentication protocols prove your emails are really from you:
-          </p>
-          <ul style="margin-left: 20px; line-height: 1.8;">
-            <li><strong>SPF (Sender Policy Framework)</strong> → "Only these servers can send from my domain"</li>
-            <li><strong>DKIM (DomainKeys Identified Mail)</strong> → "My domain signed this email" (cryptographic proof)</li>
-            <li><strong>DMARC (Domain-based Message Authentication)</strong> → "Here's what to do if DKIM/SPF fail"</li>
-          </ul>
-          <p style="margin-top: 12px;">
-            Gmail, Outlook, Yahoo and others check all three. If any fail → spam folder. InboxGuard verifies them before you send.
-          </p>
-        </section>
-
-        <section class="card home-only" style="margin-top: 20px;">
-          <h2 style="font-size: 24px; margin-bottom: 16px;">InboxGuard vs Other Tools</h2>
-          <table style="width: 100%; border-collapse: collapse; line-height: 1.6;">
-            <tr style="border-bottom: 1px solid #333;">
-              <th style="text-align: left; padding: 8px; font-weight: 600;">Feature</th>
-              <th style="text-align: center; padding: 8px; font-weight: 600;">InboxGuard</th>
-              <th style="text-align: center; padding: 8px; font-weight: 600;">Check-DMARC</th>
-              <th style="text-align: center; padding: 8px; font-weight: 600;">MXToolbox</th>
-            </tr>
-            <tr style="border-bottom: 1px solid #222;">
-              <td style="padding: 8px;">Scan email before send</td>
-              <td style="text-align: center; padding: 8px;">✅</td>
-              <td style="text-align: center; padding: 8px;">❌</td>
-              <td style="text-align: center; padding: 8px;">❌</td>
-            </tr>
-            <tr style="border-bottom: 1px solid #222;">
-              <td style="padding: 8px;">SPF/DKIM/DMARC verification</td>
-              <td style="text-align: center; padding: 8px;">✅</td>
-              <td style="text-align: center; padding: 8px;">✅</td>
-              <td style="text-align: center; padding: 8px;">✅</td>
-            </tr>
-            <tr style="border-bottom: 1px solid #222;">
-              <td style="padding: 8px;">Spam score + content analysis</td>
-              <td style="text-align: center; padding: 8px;">✅</td>
-              <td style="text-align: center; padding: 8px;">❌</td>
-              <td style="text-align: center; padding: 8px;">✅</td>
-            </tr>
-            <tr style="border-bottom: 1px solid #222;">
-              <td style="padding: 8px;">AI-powered rewrites</td>
-              <td style="text-align: center; padding: 8px;">✅</td>
-              <td style="text-align: center; padding: 8px;">❌</td>
-              <td style="text-align: center; padding: 8px;">❌</td>
-            </tr>
-            <tr style="border-bottom: 1px solid #222;">
-              <td style="padding: 8px;">Built for cold email</td>
-              <td style="text-align: center; padding: 8px;">✅</td>
-              <td style="text-align: center; padding: 8px;">❌</td>
-              <td style="text-align: center; padding: 8px;">❌</td>
-            </tr>
-          </table>
         </section>
 
         </section>
