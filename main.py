@@ -2322,10 +2322,12 @@ async def razorpay_webhook(request: Request, x_razorpay_signature: str | None = 
             )
             track_event("payment_captured", {"user_id": str(user_id), "provider": "razorpay", "subscription_id": subscription_id})
 
-    elif event == "invoice.payment_failed":
-        invoice = (payload.get("payload", {}) or {}).get("invoice", {}).get("entity", {}) or {}
-        notes = invoice.get("notes", {}) or {}
-        subscription_id = str(invoice.get("subscription_id", "") or "")
+    elif event in {"invoice.payment_failed", "payment.failed", "invoice.expired"}:
+        payment_entity = (payload.get("payload", {}) or {}).get("payment", {}).get("entity", {}) or {}
+        invoice_entity = (payload.get("payload", {}) or {}).get("invoice", {}).get("entity", {}) or {}
+        entity = payment_entity or invoice_entity
+        notes = entity.get("notes", {}) or {}
+        subscription_id = str(entity.get("subscription_id", "") or "")
         user_id = _extract_user_id(notes) or _get_user_id_by_subscription_id(subscription_id)
         if user_id > 0:
             _set_user_subscription_state(
@@ -2336,11 +2338,11 @@ async def razorpay_webhook(request: Request, x_razorpay_signature: str | None = 
             )
             _record_payment(
                 user_id=user_id,
-                amount=int(invoice.get("amount", 0) or 0),
+                amount=int(entity.get("amount", 0) or 0),
                 status="failed",
                 subscription_id=subscription_id,
-                payment_id=str(invoice.get("payment_id", "") or ""),
-                invoice_id=str(invoice.get("id", "") or ""),
+                payment_id=str(entity.get("payment_id", "") or payment_entity.get("id", "") or ""),
+                invoice_id=str(invoice_entity.get("id", "") or ""),
             )
 
     elif event == "subscription.cancelled":
