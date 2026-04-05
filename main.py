@@ -153,6 +153,17 @@ LONG_TAIL_PAGES = [
 ]
 LONG_TAIL_BY_SLUG = {item["slug"]: item for item in LONG_TAIL_PAGES}
 
+# ⚠️ STEP 4: Fix Railway Proxy Issue (CRITICAL)
+# Railway runs behind reverse proxy → FastAPI needs to trust X-Forwarded-* headers
+from starlette.middleware import Middleware
+from starlette.middleware.trustedhost import TrustedHostMiddleware
+
+# Add TrustedHost middleware to allow reverse proxy headers
+app.add_middleware(
+    TrustedHostMiddleware,
+    allowed_hosts=["*"],  # Railway handles routing; trust all
+)
+
 # Configure SessionMiddleware with secure defaults for production
 # Railway runs behind reverse proxy → cookies need proper HTTPS signaling
 app.add_middleware(
