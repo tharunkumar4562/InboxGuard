@@ -855,6 +855,10 @@ function resumePendingAfterAuthIfNeeded() {
 function openAuthModalFromQueryIfNeeded() {
     const params = new URLSearchParams(window.location.search);
     const shouldOpen = params.get("auth") === "1";
+    const authError = String(params.get("auth_error") || "").trim();
+    if (authError === "google_oauth_failed") {
+        showError("Google login failed. Try again or use email sign-in.");
+    }
     if (!shouldOpen) {
         return;
     }

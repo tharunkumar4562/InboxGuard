@@ -3148,6 +3148,7 @@ async def auth_google_login(request: Request, next: str = "/?resume=1"):
         raise HTTPException(status_code=503, detail="Google OAuth is not configured")
 
     request.session["auth_next"] = next
+    request.session["auth_provider"] = "google"
     redirect_uri = f"{SITE_URL}/auth/google/callback"
     return await client.authorize_redirect(request, redirect_uri)
 
@@ -3158,22 +3159,35 @@ async def auth_google_callback(request: Request):
     if client is None:
         raise HTTPException(status_code=503, detail="Google OAuth is not configured")
 
-    token = await client.authorize_access_token(request)
-    user_info = token.get("userinfo") if isinstance(token, dict) else None
-    if not user_info:
-        user_info = await client.userinfo(token=token)
+    try:
+        token = await client.authorize_access_token(request)
+        user_info = token.get("userinfo") if isinstance(token, dict) else None
+        if not user_info:
+            user_info = await client.userinfo(token=token)
 
-    email = str((user_info or {}).get("email", "")).strip().lower()
-    full_name = str((user_info or {}).get("name", "")).strip()
-    picture = str((user_info or {}).get("picture", "")).strip()
-    if not email:
-        raise HTTPException(status_code=400, detail="Google account email not available")
+        email = str((user_info or {}).get("email", "")).strip().lower()
+        full_name = str((user_info or {}).get("name", "")).strip()
+        picture = str((user_info or {}).get("picture", "")).strip()
+        if not email:
+            raise HTTPException(status_code=400, detail="Google account email not available")
 
-    user_id = _get_or_create_google_user(email)
-    _set_session_user(request, user_id, email, name=full_name, picture=picture)
-    track_event("access_request", {"target": "login", "mode": "google_oauth"})
-    next_url = str(request.session.pop("auth_next", "/"))
-    return RedirectResponse(url=next_url, status_code=303)
+        user_id = _get_or_create_google_user(email)
+        _set_session_user(request, user_id, email, name=full_name, picture=picture)
+        request.session["auth_provider"] = "google"
+        track_event("access_request", {"target": "login", "mode": "google_oauth"})
+        next_url = str(request.session.pop("auth_next", "/"))
+        return RedirectResponse(url=next_url, status_code=303)
+    except HTTPException:
+        raise
+    except Exception as error:
+        logger.exception("Google OAuth callback failed")
+        track_event(
+            "access_request_failed",
+            {"target": "login", "mode": "google_oauth", "error": error.__class__.__name__},
+        )
+        request.session.pop("auth_next", None)
+        request.session.pop("auth_provider", None)
+        return RedirectResponse(url="/?auth=1&auth_error=google_oauth_failed", status_code=303)
 
 
 @app.post("/auth/logout")
