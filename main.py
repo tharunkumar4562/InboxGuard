@@ -25,7 +25,6 @@ from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse,
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
-from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from jinja2 import TemplateNotFound, TemplateError
 from authlib.integrations.starlette_client import OAuth
@@ -49,8 +48,6 @@ logger = logging.getLogger("inboxguard")
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
 TEMPLATES_DIR = BASE_DIR / "templates"
-DATA_DIR = Path(os.getenv("INBOXGUARD_DATA_DIR", str(BASE_DIR / "data"))).expanduser()
-IS_PRODUCTION = os.getenv("RAILWAY_ENVIRONMENT", "").strip().lower() == "production" or os.getenv("RENDER", "").strip().lower() == "true"
 
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
@@ -58,9 +55,8 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 SITE_URL = os.getenv("INBOXGUARD_SITE_URL", "https://inboxguard.me")
 ADMIN_TOKEN = os.getenv("INBOXGUARD_ADMIN_TOKEN", "")
 SESSION_SECRET = os.getenv("INBOXGUARD_SESSION_SECRET", "change-me-in-production")
-SESSION_HTTPS_ONLY = os.getenv("INBOXGUARD_SESSION_HTTPS_ONLY", "1" if IS_PRODUCTION else "0").strip().lower() in {"1", "true", "yes"}
-SESSION_MAX_AGE_SECONDS = int(os.getenv("INBOXGUARD_SESSION_MAX_AGE_SECONDS", str(60 * 60 * 24 * 30)))
-AUTH_DB_FILE = DATA_DIR / "auth.db"
+SESSION_HTTPS_ONLY = os.getenv("INBOXGUARD_SESSION_HTTPS_ONLY", "0").strip().lower() in {"1", "true", "yes"}
+AUTH_DB_FILE = BASE_DIR / "data" / "auth.db"
 ANON_SCAN_LIMIT = int(os.getenv("INBOXGUARD_ANON_SCAN_LIMIT", "3"))
 FREE_USER_SCAN_LIMIT = int(os.getenv("INBOXGUARD_FREE_USER_SCAN_LIMIT", "50"))
 GOOGLE_OAUTH_ENABLED = os.getenv("INBOXGUARD_GOOGLE_OAUTH_ENABLED", "0").strip().lower() in {"1", "true", "yes"}
@@ -74,6 +70,8 @@ RAZORPAY_DISPLAY_PRICE_USD = os.getenv("INBOXGUARD_RAZORPAY_DISPLAY_PRICE_USD", 
 RAZORPAY_PLAN_ID = os.getenv("INBOXGUARD_RAZORPAY_PLAN_ID", os.getenv("RAZORPAY_PLAN_ID", "")).strip()
 RAZORPAY_ANNUAL_PLAN_ID = os.getenv("INBOXGUARD_RAZORPAY_ANNUAL_PLAN_ID", os.getenv("RAZORPAY_ANNUAL_PLAN_ID", "")).strip()
 RAZORPAY_TRIAL_PLAN_ID = os.getenv("INBOXGUARD_RAZORPAY_TRIAL_PLAN_ID", os.getenv("RAZORPAY_TRIAL_PLAN_ID", "")).strip()
+RAZORPAY_PRO_PLAN_ID = os.getenv("INBOXGUARD_RAZORPAY_PRO_PLAN_ID", "").strip()
+RAZORPAY_STARTER_PLAN_ID = os.getenv("INBOXGUARD_RAZORPAY_STARTER_PLAN_ID", "").strip()
 TRIAL_DAYS = int(os.getenv("INBOXGUARD_TRIAL_DAYS", "7"))
 PAST_DUE_GRACE_DAYS = int(os.getenv("INBOXGUARD_PAST_DUE_GRACE_DAYS", "3"))
 GOOGLE_VERIFICATION_FILE = "googleab4b33a28d8dfb88.html"
@@ -114,33 +112,6 @@ BLOG_POSTS = {
             "Keep links minimal and avoid promo-heavy structure.",
         ],
     },
-    "spf-dkim-dmarc-explained": {
-        "title": "SPF, DKIM, and DMARC Explained Without the Jargon",
-        "summary": "A plain-English guide to the three DNS checks that decide inbox trust.",
-        "body": [
-            "SPF proves which servers may send on your domain's behalf.",
-            "DKIM signs the message so receivers can verify it was not altered.",
-            "DMARC ties alignment together and tells inbox providers what to do when authentication fails.",
-        ],
-    },
-    "cold-email-spam-triggers": {
-        "title": "Cold Email Spam Triggers That Hurt Deliverability",
-        "summary": "The message patterns and sending habits that most often push a cold email into spam.",
-        "body": [
-            "Too many links, too much urgency, and too many promises are high-risk combinations.",
-            "Generic intros and weak targeting make the message look automated.",
-            "Inbox trust improves when the message is short, specific, and easy to opt into.",
-        ],
-    },
-    "email-deliverability-checklist": {
-        "title": "Email Deliverability Checklist Before a Send",
-        "summary": "A pre-send checklist for SPF, DKIM, DMARC, content risk, and list hygiene.",
-        "body": [
-            "Confirm the domain is authenticated and aligned.",
-            "Remove spam phrases, pressure language, and excessive links.",
-            "Check that the audience is targeted and the unsubscribe path is obvious.",
-        ],
-    },
 }
 LONG_TAIL_PAGES = [
     {
@@ -161,35 +132,10 @@ LONG_TAIL_PAGES = [
         "problem": "email deliverability audit",
         "query": "Hostinger email deliverability audit",
     },
-    {
-        "slug": "gmail-promotions-tab-fix",
-        "provider": "Gmail",
-        "problem": "Promotions tab placement",
-        "query": "How to keep marketing emails out of Gmail Promotions",
-    },
-    {
-        "slug": "outlook-spam-folder-fix",
-        "provider": "Outlook",
-        "problem": "spam folder placement",
-        "query": "How to fix Outlook spam folder placement",
-    },
-    {
-        "slug": "newsletter-inbox-placement-audit",
-        "provider": "Newsletter teams",
-        "problem": "inbox placement",
-        "query": "Newsletter inbox placement audit",
-    },
 ]
 LONG_TAIL_BY_SLUG = {item["slug"]: item for item in LONG_TAIL_PAGES}
 
-app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
-app.add_middleware(
-    SessionMiddleware,
-    secret_key=SESSION_SECRET,
-    same_site="lax",
-    https_only=SESSION_HTTPS_ONLY,
-    max_age=SESSION_MAX_AGE_SECONDS,
-)
+app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET, same_site="lax", https_only=SESSION_HTTPS_ONLY)
 
 oauth = OAuth()
 GOOGLE_AUTH_CONFIGURED = bool(GOOGLE_OAUTH_ENABLED and GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET)
@@ -1276,11 +1222,25 @@ def _is_email_like(value: str) -> bool:
 
 
 def _plan_catalog() -> dict[str, dict[str, Any]]:
+    pro_plan_id = RAZORPAY_PRO_PLAN_ID or RAZORPAY_PLAN_ID
+    starter_plan_id = RAZORPAY_STARTER_PLAN_ID or RAZORPAY_TRIAL_PLAN_ID or RAZORPAY_PLAN_ID
     return {
         "monthly": {
             "label": "Monthly Pro",
             "display_price": RAZORPAY_DISPLAY_PRICE_USD,
-            "plan_id": RAZORPAY_PLAN_ID,
+            "plan_id": pro_plan_id,
+            "trial_days": 0,
+        },
+        "pro": {
+            "label": "Pro",
+            "display_price": RAZORPAY_DISPLAY_PRICE_USD,
+            "plan_id": pro_plan_id,
+            "trial_days": 0,
+        },
+        "starter": {
+            "label": "Starter",
+            "display_price": "$199",
+            "plan_id": starter_plan_id,
             "trial_days": 0,
         },
         "annual": {
@@ -2091,21 +2051,14 @@ def log_template_environment() -> None:
         _ensure_auth_db()
         template_files = sorted([p.name for p in TEMPLATES_DIR.glob("*.html")]) if TEMPLATES_DIR.exists() else []
         logger.warning(
-            "Startup paths base=%s data=%s templates=%s static=%s templates_exists=%s static_exists=%s template_files=%s session_https_only=%s session_max_age=%s",
+            "Startup paths base=%s templates=%s static=%s templates_exists=%s static_exists=%s template_files=%s",
             BASE_DIR,
-            DATA_DIR,
             TEMPLATES_DIR,
             STATIC_DIR,
             TEMPLATES_DIR.exists(),
             STATIC_DIR.exists(),
             template_files,
-            SESSION_HTTPS_ONLY,
-            SESSION_MAX_AGE_SECONDS,
         )
-        if IS_PRODUCTION and DATA_DIR == BASE_DIR / "data":
-            logger.warning(
-                "Persistent storage is using the app directory. Set INBOXGUARD_DATA_DIR to a mounted volume path so auth, analytics, and learning data survive redeploys."
-            )
     except Exception:
         logger.exception("Failed to log template/static startup diagnostics")
 
@@ -2187,8 +2140,21 @@ async def create_subscription(request: Request, plan: str = Form("monthly")):
     if not user:
         return JSONResponse(status_code=401, content={"ok": False, "detail": "Not authenticated"})
 
+    payload: dict[str, Any] = {}
+    if "application/json" in str(request.headers.get("content-type", "")).lower():
+        payload = await request.json()
+
     plans = _plan_catalog()
-    selected_plan = str(plan or "monthly").strip().lower()
+    selected_plan = str(payload.get("plan") or plan or "monthly").strip().lower()
+    aliases = {
+        "pro": "pro",
+        "starter": "starter",
+        "monthly": "monthly",
+        "annual": "annual",
+        "trial": "trial",
+        "usage": "usage",
+    }
+    selected_plan = aliases.get(selected_plan, "monthly")
     if selected_plan not in plans:
         selected_plan = "monthly"
     plan_data = plans[selected_plan]
@@ -2278,6 +2244,7 @@ async def create_subscription(request: Request, plan: str = Form("monthly")):
         content={
             "success": True,
             "subscription_id": subscription_id,
+            "short_url": str(data.get("short_url", "") or ""),
             "key": RAZORPAY_KEY,
             "amount": int(RAZORPAY_AMOUNT_INR) * 100,
             "currency": "INR",
@@ -3148,7 +3115,6 @@ async def auth_google_login(request: Request, next: str = "/?resume=1"):
         raise HTTPException(status_code=503, detail="Google OAuth is not configured")
 
     request.session["auth_next"] = next
-    request.session["auth_provider"] = "google"
     redirect_uri = f"{SITE_URL}/auth/google/callback"
     return await client.authorize_redirect(request, redirect_uri)
 
@@ -3159,35 +3125,22 @@ async def auth_google_callback(request: Request):
     if client is None:
         raise HTTPException(status_code=503, detail="Google OAuth is not configured")
 
-    try:
-        token = await client.authorize_access_token(request)
-        user_info = token.get("userinfo") if isinstance(token, dict) else None
-        if not user_info:
-            user_info = await client.userinfo(token=token)
+    token = await client.authorize_access_token(request)
+    user_info = token.get("userinfo") if isinstance(token, dict) else None
+    if not user_info:
+        user_info = await client.userinfo(token=token)
 
-        email = str((user_info or {}).get("email", "")).strip().lower()
-        full_name = str((user_info or {}).get("name", "")).strip()
-        picture = str((user_info or {}).get("picture", "")).strip()
-        if not email:
-            raise HTTPException(status_code=400, detail="Google account email not available")
+    email = str((user_info or {}).get("email", "")).strip().lower()
+    full_name = str((user_info or {}).get("name", "")).strip()
+    picture = str((user_info or {}).get("picture", "")).strip()
+    if not email:
+        raise HTTPException(status_code=400, detail="Google account email not available")
 
-        user_id = _get_or_create_google_user(email)
-        _set_session_user(request, user_id, email, name=full_name, picture=picture)
-        request.session["auth_provider"] = "google"
-        track_event("access_request", {"target": "login", "mode": "google_oauth"})
-        next_url = str(request.session.pop("auth_next", "/"))
-        return RedirectResponse(url=next_url, status_code=303)
-    except HTTPException:
-        raise
-    except Exception as error:
-        logger.exception("Google OAuth callback failed")
-        track_event(
-            "access_request_failed",
-            {"target": "login", "mode": "google_oauth", "error": error.__class__.__name__},
-        )
-        request.session.pop("auth_next", None)
-        request.session.pop("auth_provider", None)
-        return RedirectResponse(url="/?auth=1&auth_error=google_oauth_failed", status_code=303)
+    user_id = _get_or_create_google_user(email)
+    _set_session_user(request, user_id, email, name=full_name, picture=picture)
+    track_event("access_request", {"target": "login", "mode": "google_oauth"})
+    next_url = str(request.session.pop("auth_next", "/"))
+    return RedirectResponse(url=next_url, status_code=303)
 
 
 @app.post("/auth/logout")

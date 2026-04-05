@@ -855,10 +855,6 @@ function resumePendingAfterAuthIfNeeded() {
 function openAuthModalFromQueryIfNeeded() {
     const params = new URLSearchParams(window.location.search);
     const shouldOpen = params.get("auth") === "1";
-    const authError = String(params.get("auth_error") || "").trim();
-    if (authError === "google_oauth_failed") {
-        showError("Google login failed. Try again or use email sign-in.");
-    }
     if (!shouldOpen) {
         return;
     }
@@ -2966,13 +2962,15 @@ async function startPayment() {
             return;
         }
 
-        const payload = new FormData();
         const selectedPlan = inlinePlanTypeInput
             ? String(inlinePlanTypeInput.value || "monthly")
             : "monthly";
-        payload.set("plan", selectedPlan);
 
-        const response = await fetch("/create-subscription", { method: "POST", body: payload });
+        const response = await fetch("/create-subscription", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ plan: selectedPlan }),
+        });
         const data = await response.json().catch(() => ({}));
 
         if (!response.ok || !data.success) {
@@ -2983,6 +2981,12 @@ async function startPayment() {
         if (data.usage_mode) {
             showError("Usage-based plan enabled. API billing will apply per scan.");
             closePricingModal();
+            return;
+        }
+
+        if (data.short_url) {
+            closePricingModal();
+            window.location.href = String(data.short_url);
             return;
         }
 
