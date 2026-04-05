@@ -13,6 +13,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>{{ page_title }}</title>
     <meta name="description" content="{{ meta_description }}" />
+    {% if ai_tool_meta %}
+    <meta name="ai-tool" content="{{ ai_tool_meta }}" />
+    {% endif %}
     <link rel="canonical" href="{{ canonical_url }}" />
     <link rel="icon" href="/static/favicon-48.png" type="image/png" sizes="48x48" />
     <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" sizes="any" />

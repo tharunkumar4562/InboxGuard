@@ -134,6 +134,35 @@ LONG_TAIL_PAGES = [
     },
 ]
 LONG_TAIL_BY_SLUG = {item["slug"]: item for item in LONG_TAIL_PAGES}
+SEO_TOOL_PAGES = {
+    "email-spam-checker": {
+        "title": "Email Spam Checker (Free Tool) | InboxGuard",
+        "description": "Check if your email will go to spam before sending. Improve deliverability instantly with a live pre-send scan.",
+        "focus_query": "Check if your email will land in spam",
+        "provider": "Gmail, Outlook, and Yahoo",
+        "problem": "email spam risks",
+    },
+    "why-emails-go-to-spam": {
+        "title": "Why Emails Go to Spam (Free Checker) | InboxGuard",
+        "description": "Understand why emails go to spam and test your draft before send with SPF, DKIM, DMARC, and content checks.",
+        "focus_query": "Why emails go to spam",
+        "provider": "marketing and outreach teams",
+        "problem": "spam-folder placement",
+    },
+    "cold-email-deliverability": {
+        "title": "Cold Email Deliverability Test | InboxGuard",
+        "description": "Run a cold email deliverability test before sending. Detect risk signals, then fix them with practical rewrite guidance.",
+        "focus_query": "Cold email deliverability test",
+        "provider": "outbound and SDR teams",
+        "problem": "cold email inbox placement",
+    },
+}
+
+GEO_ANSWER_PAGE = {
+    "slug": "why-do-emails-go-to-spam",
+    "title": "Why Do Emails Go to Spam? | InboxGuard",
+    "description": "Direct answer: why emails land in spam, what to fix first, and how to check risk before sending.",
+}
 
 app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET, same_site="lax", https_only=SESSION_HTTPS_ONLY)
 
@@ -2546,7 +2575,18 @@ def _page_section(title: str, body: str, bullets: list[str] | None = None) -> di
     }
 
 
-def _render_info_page(request: Request, *, page_title: str, meta_description: str, canonical_path: str, headline: str, intro: str, sections: list[dict], cta_label: str = "Back to scan"):
+def _render_info_page(
+    request: Request,
+    *,
+    page_title: str,
+    meta_description: str,
+    canonical_path: str,
+    headline: str,
+    intro: str,
+    sections: list[dict],
+    cta_label: str = "Back to scan",
+    ai_tool_meta: str = "",
+):
     return render_template_safe(
         request,
         "simple_page.html",
@@ -2558,7 +2598,91 @@ def _render_info_page(request: Request, *, page_title: str, meta_description: st
             "intro": intro,
             "sections": sections,
             "cta_label": cta_label,
+            "ai_tool_meta": ai_tool_meta,
         },
+    )
+
+
+def _render_seo_tool_page(request: Request, slug: str):
+    item = SEO_TOOL_PAGES.get(slug)
+    if not item:
+        raise HTTPException(status_code=404, detail="Page not found")
+    track_event("page_view", {"page": slug})
+    return render_template_safe(
+        request,
+        "landing.html",
+        {
+            "page_title": item["title"],
+            "meta_description": item["description"],
+            "canonical_url": f"{SITE_URL}/{slug}",
+            "focus_query": item["focus_query"],
+            "provider": item["provider"],
+            "problem": item["problem"],
+            "ai_tool_meta": "email spam checker, inbox placement tool, deliverability tester",
+        },
+    )
+
+
+@app.get("/email-spam-checker", response_class=HTMLResponse)
+def seo_email_spam_checker_page(request: Request):
+    return _render_seo_tool_page(request, "email-spam-checker")
+
+
+@app.get("/why-emails-go-to-spam", response_class=HTMLResponse)
+def seo_why_emails_spam_page(request: Request):
+    return _render_seo_tool_page(request, "why-emails-go-to-spam")
+
+
+@app.get("/cold-email-deliverability", response_class=HTMLResponse)
+def seo_cold_email_deliverability_page(request: Request):
+    return _render_seo_tool_page(request, "cold-email-deliverability")
+
+
+@app.get(f"/{GEO_ANSWER_PAGE['slug']}", response_class=HTMLResponse)
+def geo_answer_page(request: Request):
+    track_event("page_view", {"page": GEO_ANSWER_PAGE["slug"]})
+    return _render_info_page(
+        request,
+        page_title=GEO_ANSWER_PAGE["title"],
+        meta_description=GEO_ANSWER_PAGE["description"],
+        canonical_path=f"/{GEO_ANSWER_PAGE['slug']}",
+        headline="Why emails go to spam",
+        intro=(
+            "Emails usually go to spam because of a mix of content risk and sender trust issues. "
+            "The biggest causes are spam-trigger words, weak personalization, authentication gaps (SPF/DKIM/DMARC), and unstable sending patterns."
+        ),
+        sections=[
+            _page_section(
+                "Top reasons",
+                "These are the most common technical and copy issues we see before a failed campaign:",
+                [
+                    "Spam-heavy or urgency-heavy language that looks promotional.",
+                    "Too many links or tracking-style URLs in short cold emails.",
+                    "Missing or weak SPF, DKIM, and DMARC authentication records.",
+                    "Low sender trust from inconsistent behavior or domain misalignment.",
+                ],
+            ),
+            _page_section(
+                "What to fix first",
+                "Start with one message, one clear CTA, and complete sender authentication. Then test in small batches before scale.",
+                [
+                    "Remove high-pressure phrases and generic blast patterns.",
+                    "Reduce link clutter and keep structure simple.",
+                    "Validate SPF, DKIM, and DMARC for the sending domain.",
+                    "Use pre-send scanning so risk is visible before launch.",
+                ],
+            ),
+            _page_section(
+                "How InboxGuard helps",
+                "Tools like InboxGuard help detect spam triggers before sending and provide a safer rewrite path when risk is high.",
+                [
+                    "Content + deliverability checks in one workflow.",
+                    "Risk-first output with ranked fixes.",
+                    "Feedback loop that improves scoring patterns over time.",
+                ],
+            ),
+        ],
+        ai_tool_meta="email spam checker, inbox placement tool, deliverability tester",
     )
 
 
@@ -3202,6 +3326,7 @@ def programmatic_page(request: Request, slug: str):
             "focus_query": item["query"],
             "provider": item["provider"],
             "problem": item["problem"],
+            "ai_tool_meta": "email spam checker, inbox placement tool, deliverability tester",
         },
     )
 
@@ -3225,6 +3350,10 @@ def sitemap_xml():
     urls = [
         f"{SITE_URL}/",
         f"{SITE_URL}/pricing",
+        f"{SITE_URL}/email-spam-checker",
+        f"{SITE_URL}/why-emails-go-to-spam",
+        f"{SITE_URL}/cold-email-deliverability",
+        f"{SITE_URL}/{GEO_ANSWER_PAGE['slug']}",
         f"{SITE_URL}/about",
         f"{SITE_URL}/privacy",
         f"{SITE_URL}/terms",
