@@ -32,9 +32,11 @@ BLOCKED_REWRITE_PHRASES = [
 def _default_model() -> Dict:
     return {
         "total_feedback": 0,
+        "sample_size": 0,
         "inbox": 0,
         "spam": 0,
         "not_sure": 0,
+        "patterns": {},
         "updated_at": "",
     }
 
@@ -70,6 +72,32 @@ def _write_json(path: Path, payload: Dict) -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     payload["updated_at"] = datetime.now(timezone.utc).isoformat()
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
+def _extract_learning_patterns(text: str) -> List[str]:
+    body = str(text or "")
+    low = body.lower()
+    patterns: List[str] = []
+    if "http://" in low or "https://" in low or "www." in low:
+        patterns.append("has_links")
+    if len(body.split()) < 60:
+        patterns.append("short_length")
+    if any(term in low for term in ("apply now", "click here", "book a demo", "schedule a call", "register now")):
+        patterns.append("aggressive_cta")
+    if "?" in body:
+        patterns.append("has_question")
+    if body.count("!") >= 3:
+        patterns.append("high_exclamation")
+    return patterns
+
+
+def _recompute_pattern_weight(success: int, fail: int) -> int:
+    total = max(0, int(success) + int(fail))
+    if total == 0:
+        return 0
+    # Map net performance into a small bounded adjustment to avoid score instability.
+    score = ((int(success) - int(fail)) / total) * 6.0
+    return max(-4, min(4, int(round(score))))
 
 
 def get_learning_profile() -> Dict:
@@ -136,7 +164,30 @@ def record_feedback(event: Dict) -> Dict:
 
         model = _read_json(MODEL_FILE, _default_model())
         model["total_feedback"] = int(model.get("total_feedback", 0)) + 1
+        model["sample_size"] = int(model.get("sample_size", model.get("total_feedback", 0)) or 0) + 1
         model[outcome] = int(model.get(outcome, 0)) + 1
+
+        # Train lightweight pattern weights from real outcomes so scoring can adapt over time.
+        source_text = str(event.get("rewritten_text") or event.get("original_text") or "")
+        pattern_names = _extract_learning_patterns(source_text)
+        pattern_store = model.setdefault("patterns", {})
+        if not isinstance(pattern_store, dict):
+            pattern_store = {}
+            model["patterns"] = pattern_store
+
+        for pattern in pattern_names:
+            bucket = pattern_store.setdefault(pattern, {"success": 0, "fail": 0, "weight": 0})
+            if not isinstance(bucket, dict):
+                bucket = {"success": 0, "fail": 0, "weight": 0}
+                pattern_store[pattern] = bucket
+
+            if outcome == "inbox":
+                bucket["success"] = int(bucket.get("success", 0)) + 1
+            elif outcome == "spam":
+                bucket["fail"] = int(bucket.get("fail", 0)) + 1
+
+            bucket["weight"] = _recompute_pattern_weight(int(bucket.get("success", 0)), int(bucket.get("fail", 0)))
+
         _write_json(MODEL_FILE, model)
 
     return {
