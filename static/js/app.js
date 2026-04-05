@@ -448,11 +448,16 @@ async function refreshHomeLiveStats() {
         const data = await response.json();
         const samples = Number(data.samples || 0);
         const inboxRate = Number(data.inbox_rate || 0).toFixed(1);
-        const benchmark = Number(data.benchmark_top_10_score || 85);
+        const benchmarkValue = data.benchmark_top_10_score;
+        const benchmarkSamples = Number(data.benchmark_inbox_samples || 0);
         const bands = Array.isArray(data.score_bands) ? data.score_bands : [];
 
         liveStatsSummaryNode.textContent = `Tracked outcomes: ${samples} | Inbox rate: ${inboxRate}%`;
-        liveStatsBreakdownNode.textContent = `Current top benchmark: ${benchmark}+ score before scale. Band rows loaded: ${bands.length}.`;
+        if (benchmarkValue === null || benchmarkValue === undefined) {
+            liveStatsBreakdownNode.textContent = `No inbox benchmark yet. Record at least 10 inbox outcomes to build a real baseline. Band rows loaded: ${bands.length}.`;
+        } else {
+            liveStatsBreakdownNode.textContent = `Current inbox benchmark: ${Number(benchmarkValue)}+ based on ${benchmarkSamples} inbox outcomes. Band rows loaded: ${bands.length}.`;
+        }
         liveStatsStatusNode.textContent = "Updates in real time as new feedback is recorded.";
     } catch (error) {
         liveStatsSummaryNode.textContent = "Live performance metrics are temporarily unavailable.";
@@ -1528,11 +1533,18 @@ function renderPrediction(summary, prediction) {
     const score = Number(summary && (summary.final_score || summary.score || 0));
     const prob = Number(prediction && prediction.inbox_probability ? prediction.inbox_probability : 0);
     const likely = String(prediction && prediction.likely_outcome ? prediction.likely_outcome : "unknown");
-    const benchmark = Number(prediction && prediction.benchmark_top_10_score ? prediction.benchmark_top_10_score : 85);
+    const benchmark = prediction && prediction.benchmark ? prediction.benchmark : null;
+    const benchmarkAvailable = Boolean(benchmark && benchmark.available);
+    const benchmarkScore = benchmarkAvailable ? Number(benchmark.top_10_score || 0) : 0;
+    const benchmarkInboxSamples = benchmarkAvailable ? Number(benchmark.inbox_samples || 0) : 0;
     const samples = Number(prediction && prediction.samples ? prediction.samples : 0);
 
     predictionHeadlineNode.textContent = `Will likely land: ${likely.toUpperCase()} (${prob.toFixed(1)}% inbox probability)`;
-    predictionDetailNode.textContent = `Your score: ${score} | Top campaigns usually score ${benchmark}+ before scale | Learned samples: ${samples}`;
+    if (benchmarkAvailable) {
+        predictionDetailNode.textContent = `Your score: ${score} | Your inbox benchmark is ${benchmarkScore}+ based on ${benchmarkInboxSamples} inbox outcomes | Learned samples: ${samples}`;
+    } else {
+        predictionDetailNode.textContent = `Your score: ${score} | No inbox benchmark yet - record at least 10 inbox outcomes to build a real baseline | Learned samples: ${samples}`;
+    }
     predictionBandsNode.innerHTML = "";
     const rows = [
         `Score 85+ usually maps to strongest inbox probability.`,
@@ -1972,10 +1984,13 @@ function renderDecisionEngine(summary, signals, findings, prediction) {
     }
     if (realityStripBodyNode) {
         const benchmark = prediction && prediction.benchmark ? prediction.benchmark : null;
-        const analyzed = Number(benchmark && benchmark.emails_analyzed ? benchmark.emails_analyzed : 12483);
-        const topScore = Number(benchmark && benchmark.top_score ? benchmark.top_score : (prediction && prediction.benchmark_top_10_score ? prediction.benchmark_top_10_score : 85));
-        const drop = Number(benchmark && benchmark.avg_reply_drop ? benchmark.avg_reply_drop : 37);
-        realityStripBodyNode.textContent = `${analyzed.toLocaleString()} emails analyzed. Top inbox campaigns usually score ${topScore}+. Emails that stay below this commonly see ~${drop}% lower replies at scale.`;
+        if (benchmark && benchmark.available) {
+            const topScore = Number(benchmark.top_10_score || 0);
+            const inboxSamples = Number(benchmark.inbox_samples || 0);
+            realityStripBodyNode.textContent = `${inboxSamples} inbox outcomes recorded. Your top inbox campaigns in this dataset usually score ${topScore}+.`;
+        } else {
+            realityStripBodyNode.textContent = "No inbox benchmark yet. Keep scanning and recording inbox outcomes until a real baseline is built.";
+        }
     }
 
     const nonMeta = (findings || []).filter((f) => !String(f.title || "").toLowerCase().includes("analysis mode"));

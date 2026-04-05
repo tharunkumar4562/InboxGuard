@@ -1784,6 +1784,18 @@ def _record_email_outcome(user_id: int, score: int, outcome: str, risk_band: str
         conn.close()
 
 
+def _benchmark_top_inbox_score(rows: list[sqlite3.Row]) -> tuple[Optional[int], int]:
+    inbox_scores = sorted(
+        [int(row["score"] or 0) for row in rows if str(row["outcome"] or "") == "inbox"],
+        reverse=True,
+    )
+    inbox_sample_count = len(inbox_scores)
+    if inbox_sample_count < 10:
+        return None, inbox_sample_count
+    top_ten = inbox_scores[:10]
+    return int(round(sum(top_ten) / len(top_ten))), inbox_sample_count
+
+
 def _score_outcome_stats(user_id: int) -> dict[str, Any]:
     _ensure_auth_db_ready()
     conn = _auth_db_conn()
@@ -1800,7 +1812,8 @@ def _score_outcome_stats(user_id: int) -> dict[str, Any]:
             "samples": 0,
             "inbox_rate": 0.0,
             "score_bands": [],
-            "benchmark_top_10_score": 85,
+            "benchmark_top_10_score": None,
+            "benchmark_inbox_samples": 0,
         }
 
     total = len(rows)
@@ -1831,11 +1844,14 @@ def _score_outcome_stats(user_id: int) -> dict[str, Any]:
         rate = (item["inbox"] / item["total"] * 100.0) if item["total"] else 0.0
         band_rows.append({"band": key, "samples": item["total"], "inbox_rate": round(rate, 1)})
 
+    benchmark_score, benchmark_inbox_samples = _benchmark_top_inbox_score(rows)
+
     return {
         "samples": total,
         "inbox_rate": round(inbox_hits / total * 100.0, 1),
         "score_bands": band_rows,
-        "benchmark_top_10_score": 85,
+        "benchmark_top_10_score": benchmark_score,
+        "benchmark_inbox_samples": benchmark_inbox_samples,
     }
 
 
@@ -2322,12 +2338,10 @@ async def razorpay_webhook(request: Request, x_razorpay_signature: str | None = 
             )
             track_event("payment_captured", {"user_id": str(user_id), "provider": "razorpay", "subscription_id": subscription_id})
 
-    elif event in {"invoice.payment_failed", "payment.failed", "invoice.expired"}:
-        payment_entity = (payload.get("payload", {}) or {}).get("payment", {}).get("entity", {}) or {}
-        invoice_entity = (payload.get("payload", {}) or {}).get("invoice", {}).get("entity", {}) or {}
-        entity = payment_entity or invoice_entity
-        notes = entity.get("notes", {}) or {}
-        subscription_id = str(entity.get("subscription_id", "") or "")
+    elif event == "invoice.payment_failed":
+        invoice = (payload.get("payload", {}) or {}).get("invoice", {}).get("entity", {}) or {}
+        notes = invoice.get("notes", {}) or {}
+        subscription_id = str(invoice.get("subscription_id", "") or "")
         user_id = _extract_user_id(notes) or _get_user_id_by_subscription_id(subscription_id)
         if user_id > 0:
             _set_user_subscription_state(
@@ -2338,11 +2352,11 @@ async def razorpay_webhook(request: Request, x_razorpay_signature: str | None = 
             )
             _record_payment(
                 user_id=user_id,
-                amount=int(entity.get("amount", 0) or 0),
+                amount=int(invoice.get("amount", 0) or 0),
                 status="failed",
                 subscription_id=subscription_id,
-                payment_id=str(entity.get("payment_id", "") or payment_entity.get("id", "") or ""),
-                invoice_id=str(invoice_entity.get("id", "") or ""),
+                payment_id=str(invoice.get("payment_id", "") or ""),
+                invoice_id=str(invoice.get("id", "") or ""),
             )
 
     elif event == "subscription.cancelled":
@@ -3322,7 +3336,8 @@ def _run_analysis_request(
         stats = _score_outcome_stats(int(user["id"]))
         prediction = _predict_inbox_probability(final_score, stats)
         decision = _decision_from_inbox_probability(prediction)
-        benchmark_score = int(stats.get("benchmark_top_10_score", 85))
+        benchmark_score = stats.get("benchmark_top_10_score")
+        benchmark_inbox_samples = int(stats.get("benchmark_inbox_samples", 0) or 0)
         remaining_tokens = _get_user_tokens(int(user["id"]))
         result["prediction"] = {
             "inbox_probability": prediction,
@@ -3330,9 +3345,10 @@ def _run_analysis_request(
             "decision": decision,
             "benchmark_top_10_score": benchmark_score,
             "benchmark": {
-                "emails_analyzed": 12483,
-                "top_score": benchmark_score,
-                "avg_reply_drop": 37,
+                "available": benchmark_score is not None,
+                "top_10_score": benchmark_score,
+                "inbox_samples": benchmark_inbox_samples,
+                "sample_count": int(stats.get("samples", 0)),
             },
             "samples": int(stats.get("samples", 0)),
         }
@@ -3350,11 +3366,12 @@ def _run_analysis_request(
             "inbox_probability": prediction,
             "likely_outcome": "inbox" if prediction >= 70 else "promotions" if prediction >= 45 else "spam",
             "decision": decision,
-            "benchmark_top_10_score": 85,
+            "benchmark_top_10_score": None,
             "benchmark": {
-                "emails_analyzed": 12483,
-                "top_score": 85,
-                "avg_reply_drop": 37,
+                "available": False,
+                "top_10_score": None,
+                "inbox_samples": 0,
+                "sample_count": 0,
             },
             "samples": 0,
         }
